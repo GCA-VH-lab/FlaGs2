@@ -1,4 +1,4 @@
-__author__		= "Chayan Kumar Saha, Jose Nakamoto, Gemma C. Atkinson"
+__author__		= "Chayan Kumar Saha, Jose Nakamoto, Veda Bojar, Gemma C. Atkinson"
 __copyright__	= "GNU General Public License v3.0"
 __email__		= "jose.n.kuahara@gmail.com, chayan.sust7@gmail.com"
 
