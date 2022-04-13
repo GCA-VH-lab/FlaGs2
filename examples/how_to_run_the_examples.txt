@@ -1,0 +1,29 @@
+##Mac OS or Linux:
+	./FlaGs2.py <options>
+	or Python3 FlaGs2.py <options>
+	or (if Python 3 is the default python) Python FlaGs2.py <options>
+
+Without tree (only Biopython neccessary):
+
+              python FlaGs2.py -a GCF_accession_input.txt -o GCF_accession_output -vb
+
+              or
+
+              python FlaGs2.py -p accession_input.txt -o accession_output -vb
+
+With tree (Biopython and ETE necessary):
+
+              python FlaGs2.py -a GCF_accession_input.txt -t -to -o GCF_accession_output -vb
+              
+              or 
+              
+              python FlaGs2.py -p accession_input.txt -t -to -o accession_output -vb
+              
+              
+With tree and interactive ETE tree editing window:
+
+              python FlaGs2.py -a GCF_accession_input.txt -t -o GCF_accession_output -vb
+              
+              or 
+              
+              python FlaGs2.py -p accession_input.txt -t -o accession_output -vb
