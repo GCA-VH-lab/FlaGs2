@@ -25,6 +25,9 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import pandas as pd
 import matplotlib as mpl
+import ete3
+os.environ['QT_QPA_PLATFORM']='offscreen'
+
 
 usage= ''' Description:  Identify flanking genes and cluster them based on similarity and visualize the structure; Requirement= Python3, BioPython; tkinter ; Optional Requirement= ETE3. '''
 
