@@ -6,3 +6,5 @@ Run the shell script 'build.sh' to create a conda environment specifically for F
 - When the length of Flanking Gene is more than 5000 amino acids Jackhmmer can not process the clustering step and thus raised error for few reported cases. This version of FlaGs checks the length of all the Flanking Genes for each query. When the query is identified with a flanking gene that is longer than 5000 amino acids, it is excluded (but reported in the file with '_QueryStatus.txt' suffix) from the analyses to avoid errors. 
 
 Running FlaGs_tkinter_output.py with the .tsv file generated from FlaGs2 as input will create a graphical output as the original version of FlaGs. 
+
+Run FlaGs2_cluster.py to bypass ETE3 display dependency.
