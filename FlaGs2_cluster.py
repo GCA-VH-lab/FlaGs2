@@ -1496,15 +1496,14 @@ else:
 	if args.verbose:
 		print ('Description collected for Flanking Genes!')
 
-if args.hmmdb: #Generate fasta file for domain_search
-	with open(args.out_prefix+'_all.fasta', 'w') as all_fasta:
-		for queries in NqueryDict:
-			if queries in accFlankDict:
-				if queries in treeFastadict:
-					print(treeFastadict[queries], file=all_fasta)
-		for seqids in sorted(seqDict):
-			if seqDict[seqids]!='--':
-				print('>'+desDict[seqids]+'\n'+seqDict[seqids], file=all_fasta)
+with open(args.out_prefix+'_all.fasta', 'w') as all_fasta:
+	for queries in NqueryDict:
+		if queries in accFlankDict:
+			if queries in treeFastadict:
+				print(treeFastadict[queries], file=all_fasta)
+	for seqids in sorted(seqDict):
+		if seqDict[seqids]!='--':
+			print('>'+desDict[seqids]+'\n'+seqDict[seqids], file=all_fasta)
 		
 		
 b=0
