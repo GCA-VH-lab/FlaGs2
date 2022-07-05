@@ -1717,8 +1717,8 @@ for ids in LengthDict:
 color={}
 color[noColor]='#ffffff'
 color[center]='#000000'
-color[noProt]='#f2f2f2'
-color[noProtP]='#f2f2f3'
+color[noProtP]='#f2f2f2'
+color[noProt]='#f2f2f3'
 colorDict={}  #Assigned family Number from Jackhammer : colorcode
 for families in set(familynum):
 	if families == 0:
@@ -1847,7 +1847,7 @@ if not args.tree_order:
 				# 5. Adding the family number inside the gene/arrow
 				text_x = x_gene_start + (dx_gene_length/2)
 	 
-				if dom1_name != 0 and 'pseudogene_' not in id1 and 'RNA_' not in id1:
+				if dom1_name != 0 and 'pseudogene_' not in id1 and 'RNA_' not in id1 and x_gene_start != 1:
 					ax[1].text(text_x, y_level_m*0.65-0.35, s = dom1_name, horizontalalignment='center', color = 'k', font = {'family' : 'sans-serif','size'   : 8})
 				else:
 					pass
@@ -2105,7 +2105,7 @@ if args.tree and args.tree_order:  # Queries in postscript file will be presente
 				# 5. Adding the family number inside the gene/arrow
 				text_x = x_gene_start + (dx_gene_length/2)
 	 
-				if dom1_name != 0 and 'pseudogene_' not in id1 and 'RNA_' not in id1:
+				if dom1_name != 0 and 'pseudogene_' not in id1 and 'RNA_' not in id1 and x_gene_start != 1:
 					ax[1].text(text_x, y_level_m*0.65-0.35, s = dom1_name, horizontalalignment='center', color = 'k', font = {'family' : 'sans-serif','size'   : 8})
 				else:
 					pass
