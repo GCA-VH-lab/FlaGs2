@@ -59,7 +59,7 @@ parser.add_argument("-vb", "--verbose", action="store_true", help=" Use this opt
 args = parser.parse_args()
 parser.parse_args()
 
-print("\nStarting FlaGs2 version 1.1.1 \nPlease only run one instance of FlaGs2 at a time to avoid making more queries than NCBI’s limit.")
+print("\nStarting FlaGs2 version 1.1.4 \nPlease only run one instance of FlaGs2 at a time to avoid making more queries than NCBI’s limit.")
 print('For more information, please check https://ncbiinsights.ncbi.nlm.nih.gov/2017/11/02/new-api-keys-for-the-e-utilities/ \n')
 print('Checking for RefSeq and Genbank summary files and downloading if needed ... \n')
 
@@ -1841,7 +1841,10 @@ if not args.tree_order:
 					dx_gene_length = dx_gene_length
 	
 				# 3c. Drawing the genes as arrows. 
-				arrowList.append(ax[1].arrow(x=x_gene_start, y=y_level_m*0.65, dx=dx_gene_length, dy=0, width=1.1, head_width=1.1, length_includes_head = True, head_length = 150, facecolor = colorDict[dom1_name], edgecolor = outliner(colorDict[dom1_name]), alpha=1))
+				if abs(dx_gene_length) < 200:
+					arrowList.append(ax[1].arrow(x=x_gene_start, y=y_level_m*0.65, dx=dx_gene_length, dy=0, width=1.1, head_width=1.1, length_includes_head = True, head_length = abs(dx_gene_length)/2, facecolor = colorDict[dom1_name], edgecolor = outliner(colorDict[dom1_name]), alpha=1))               
+				else:
+					arrowList.append(ax[1].arrow(x=x_gene_start, y=y_level_m*0.65, dx=dx_gene_length, dy=0, width=1.1, head_width=1.1, length_includes_head = True, head_length = 150, facecolor = colorDict[dom1_name], edgecolor = outliner(colorDict[dom1_name]), alpha=1))
 	
 				
 				# 5. Adding the family number inside the gene/arrow
@@ -2099,7 +2102,10 @@ if args.tree and args.tree_order:  # Queries in postscript file will be presente
 					dx_gene_length = dx_gene_length
 
 				# 3c. Drawing the genes as arrows. 
-				arrowList.append(ax[1].arrow(x=x_gene_start, y=y_level_m*0.65, dx=dx_gene_length, dy=0, width=1.1, head_width=1.1, length_includes_head = True, head_length = 150, facecolor = colorDict[dom1_name], edgecolor = outliner(colorDict[dom1_name]), alpha=1))
+				if abs(dx_gene_length) < 200:
+					arrowList.append(ax[1].arrow(x=x_gene_start, y=y_level_m*0.65, dx=dx_gene_length, dy=0, width=1.1, head_width=1.1, length_includes_head = True, head_length = abs(dx_gene_length)/2, facecolor = colorDict[dom1_name], edgecolor = outliner(colorDict[dom1_name]), alpha=1))               
+				else:
+					arrowList.append(ax[1].arrow(x=x_gene_start, y=y_level_m*0.65, dx=dx_gene_length, dy=0, width=1.1, head_width=1.1, length_includes_head = True, head_length = 150, facecolor = colorDict[dom1_name], edgecolor = outliner(colorDict[dom1_name]), alpha=1))
 	
 				
 				# 5. Adding the family number inside the gene/arrow
