@@ -1717,8 +1717,8 @@ for ids in LengthDict:
 color={}
 color[noColor]='#ffffff'
 color[center]='#000000'
-color[noProtP]='#f2f2f2'
-color[noProt]='#f2f2f3'
+color[noProt]='#f2f2f2'
+color[noProtP]='#f2f2f3'
 colorDict={}  #Assigned family Number from Jackhammer : colorcode
 for families in set(familynum):
 	if families == 0:
