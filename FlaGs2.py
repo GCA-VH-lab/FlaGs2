@@ -1838,8 +1838,10 @@ if not args.tree_order:
 					dx_gene_length = dx_gene_length
 	
 				# 3c. Drawing the genes as arrows. 
-				arrowList.append(ax[1].arrow(x=x_gene_start, y=y_level_m*0.65, dx=dx_gene_length, dy=0, width=1.1, head_width=1.1, length_includes_head = True, head_length = 150, facecolor = colorDict[dom1_name], edgecolor = outliner(colorDict[dom1_name]), alpha=1))
-	
+				if abs(dx_gene_length) < 200:
+					arrowList.append(ax[1].arrow(x=x_gene_start, y=y_level_m*0.65, dx=dx_gene_length, dy=0, width=1.1, head_width=1.1, length_includes_head = True, head_length = abs(dx_gene_length)/2, facecolor = colorDict[dom1_name], edgecolor = outliner(colorDict[dom1_name]), alpha=1))               
+				else:
+					arrowList.append(ax[1].arrow(x=x_gene_start, y=y_level_m*0.65, dx=dx_gene_length, dy=0, width=1.1, head_width=1.1, length_includes_head = True, head_length = 150, facecolor = colorDict[dom1_name], edgecolor = outliner(colorDict[dom1_name]), alpha=1))
 				
 				# 5. Adding the family number inside the gene/arrow
 				text_x = x_gene_start + (dx_gene_length/2)
@@ -2096,8 +2098,10 @@ if args.tree and args.tree_order:  # Queries in postscript file will be presente
 					dx_gene_length = dx_gene_length
 
 				# 3c. Drawing the genes as arrows. 
-				arrowList.append(ax[1].arrow(x=x_gene_start, y=y_level_m*0.65, dx=dx_gene_length, dy=0, width=1.1, head_width=1.1, length_includes_head = True, head_length = 150, facecolor = colorDict[dom1_name], edgecolor = outliner(colorDict[dom1_name]), alpha=1))
-	
+				if abs(dx_gene_length) < 200:
+					arrowList.append(ax[1].arrow(x=x_gene_start, y=y_level_m*0.65, dx=dx_gene_length, dy=0, width=1.1, head_width=1.1, length_includes_head = True, head_length = abs(dx_gene_length)/2, facecolor = colorDict[dom1_name], edgecolor = outliner(colorDict[dom1_name]), alpha=1))               
+				else:
+					arrowList.append(ax[1].arrow(x=x_gene_start, y=y_level_m*0.65, dx=dx_gene_length, dy=0, width=1.1, head_width=1.1, length_includes_head = True, head_length = 150, facecolor = colorDict[dom1_name], edgecolor = outliner(colorDict[dom1_name]), alpha=1))
 				
 				# 5. Adding the family number inside the gene/arrow
 				text_x = x_gene_start + (dx_gene_length/2)
