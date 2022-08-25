@@ -51,12 +51,12 @@ parser.add_argument("-c", "--cpu", help="Maximum number of parallel CPU workers 
 parser.add_argument("-db", "--hmmdb", help=" Input hmm database to enable domain search in queries and flanking genes through hmmscan. Eg. Pfam-A.hmm, cd_all.hmm")
 #adding cutoff threshhold
 parser.add_argument("-k", "--keep", action="store_true", help=" If you want to keep the intermediate files eg. gff3 use [-k]. By default it will remove. ")
-parser.add_argument("-v", "--version", action="version", version='%(prog)s 1.1.1')
+parser.add_argument("-v", "--version", action="version", version='%(prog)s 1.1.5')
 parser.add_argument("-vb", "--verbose", action="store_true", help=" Use this option to see the work progress for each query as stdout. ")
 args = parser.parse_args()
 parser.parse_args()
 
-print("\nStarting FlaGs2 version 1.1.3 \nPlease only run one instance of FlaGs2 at a time to avoid making more queries than NCBI’s limit.")
+print("\nStarting FlaGs2 version 1.1.5 \nPlease only run one instance of FlaGs2 at a time to avoid making more queries than NCBI’s limit.")
 print('For more information, please check https://ncbiinsights.ncbi.nlm.nih.gov/2017/11/02/new-api-keys-for-the-e-utilities/ \n')
 print('Checking for RefSeq and Genbank summary files and downloading if needed ... \n')
 
@@ -1625,42 +1625,16 @@ outfile_des.close()
 if args.hmmdb:
 	print('\n>> Now running hmmscan and searching domains\n')
 	if args.cpu:
-		hmmscan_cmd = "hmmscan -E 0.00000001 --cpu %s -o %s_dom.txt --domtblout %s_dom_out.txt %s %s_all.fasta"%(round(core/3), args.out_prefix, args.out_prefix, args.hmmdb, args.out_prefix)
+		hmmscan_cmd = "hmmscan -E 1e-10 --cpu %s -o %s_dom.txt --domtblout %s_dom_out.txt %s %s_all.fasta"%(round(core/3), args.out_prefix, args.out_prefix, args.hmmdb, args.out_prefix)
 	else:
-		hmmscan_cmd = "hmmscan -E 0.00000001 -o %s_dom.txt --domtblout %s_dom_out.txt %s %s_all.fasta"%(args.out_prefix, args.out_prefix, args.hmmdb, args.out_prefix)
+		hmmscan_cmd = "hmmscan -E 1e-10 -o %s_dom.txt --domtblout %s_dom_out.txt %s %s_all.fasta"%(args.out_prefix, args.out_prefix, args.hmmdb, args.out_prefix)
 	subprocess.run(hmmscan_cmd, shell=True) #runs hmmscan 
-	
-	dom_id_dict = {}
-	with open('cdd_id_all_lut.txt','r') as lookup:
-		for line in lookup:
-			if '\t' in line:
-				key, value = line.strip().split('\t')
-				dom_id_dict[key] = value
-
-	count_check = 0
-	
-	with open(args.out_prefix+"_dom_out.txt",'r') as dom_infile, open(args.out_prefix+"_dom_out_final.txt", 'w') as dom_outfile:
-		for line in dom_infile:
-			if any(e in line for e in dom_id_dict.keys()):
-				dom_rep = line.split()
-				for temp in dom_rep:
-					if temp in dom_id_dict.keys():
-						stripped_line = line.strip()
-						new_line = stripped_line.replace(temp, temp+"_"+dom_id_dict[temp])
-						dom_outfile.write(new_line +"\n")
-					else:
-						count_check=+1
-				if count_check!=0:
-					dom_outfile.write(line)
-					count_check = 0
-			else:
-				dom_outfile.write(line)
 
 	#domain search ends
 	#domain dictionary for outdesc output
 	dom_dict={}
 	dom_key=''
-	with open(args.out_prefix+"_dom_out_final.txt",'r') as dom_dict_infile:
+	with open(args.out_prefix+"_dom_out.txt",'r') as dom_dict_infile:
 		for line in dom_dict_infile:
 			if any(e in line for e in seqDict.keys()):
 				dom_dict_line = line.split()
@@ -1846,7 +1820,7 @@ if not args.tree_order:
 				# 5. Adding the family number inside the gene/arrow
 				text_x = x_gene_start + (dx_gene_length/2)
 	 
-				if dom1_name != 0 and 'pseudogene_' not in id1 and 'RNA_' not in id1 and x_gene_start != 1:
+				if dom1_name != 0 and 'pseudogene_' not in id1 and 'RNA_' not in id1 and 'other' not in id1 and x_gene_start != 1:
 					ax[1].text(text_x, y_level_m*0.65-0.35, s = dom1_name, horizontalalignment='center', color = 'k', font = {'family' : 'sans-serif','size'   : 8})
 				else:
 					pass
@@ -1854,13 +1828,13 @@ if not args.tree_order:
 				# 6. Adding the second plot (left-hand side) with the organism name and accesion nr etc. 
 				ptnstats = entries1[0].split("\t")
 				org = ptnstats[0][:ptnstats[0].index('|')]+ptnstats[0][ptnstats[0].index('|'):].replace('_',' ')
-				ax[0].text(0.5, y_level_m*0.65, org, horizontalalignment='center', color = '#000000', font = {'family' : 'sans-serif','size':10})
+				ax[0].text(0.5, y_level_m*0.65-0.35, org, horizontalalignment='center', color = '#000000', font = {'family' : 'sans-serif','size':10})
 				ax[0].set_axis_off()
 				
 				row = row+1
 	
 	y_new = ((len(Counter(accession_List).keys()))*0.25)	  
-	x_new = 20.0								 #NOTE! It's maybe better to have just '20.0' instead of 'y_new + 10.0'
+	x_new = (max(gene_end_list) - min(gene_start_list))/3000 + 10	 
 	fig.set_figheight(y_new)
 	fig.set_figwidth(x_new)
 	#plt.tight_layout()
@@ -2114,13 +2088,13 @@ if args.tree and args.tree_order:  # Queries in postscript file will be presente
 				# 6. Adding the second plot (left-hand side) with the organism name and accesion nr etc. 
 				ptnstats = entries1[0].split("\t")
 				org = ptnstats[0][:ptnstats[0].index('|')]+ptnstats[0][ptnstats[0].index('|'):].replace('_',' ')
-				ax[0].text(0.5, y_level_m*0.65, org, horizontalalignment='center', color = '#000000', font = {'family' : 'sans-serif','size':10})
+				ax[0].text(0.5, y_level_m*0.65-0.35, org, horizontalalignment='center', color = '#000000', font = {'family' : 'sans-serif','size':10})
 				ax[0].set_axis_off()
 				
 				row = row+1
 	
 	y_new = ((len(Counter(accession_List).keys()))*0.25)	  
-	x_new = 20.0								 #NOTE! It's maybe better to have just '20.0' instead of 'y_new + 10.0'
+	x_new = (max(gene_end_list) - min(gene_start_list))/3000 + 10		 #NOTE! It's maybe better to have just '20.0' instead of 'y_new + 10.0'
 	fig.set_figheight(y_new)
 	fig.set_figwidth(x_new)
 	#plt.tight_layout()
