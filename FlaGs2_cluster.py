@@ -1766,6 +1766,8 @@ if not args.tree_order:
 	arrowList = []
 	domainList = []
 	accession_List = []
+	gene_start_list=[]
+	gene_end_list=[]
 	#y = df[0].nunique()/4.5
 
 	
@@ -1795,7 +1797,8 @@ if not args.tree_order:
 				id1 = str(items1[9])
 				accession = str(items1[0])
 				accession_List.append(accession)
-				
+				gene_start_list.append(x_gene_start)
+				gene_end_list.append(x_gene_end)
 				# 3a. When genes are to small the arrow shape is distorted because the coordinates are too close to each other.
 				#	 This makes these genes longer to keep the shape of the arrow. 
 				if dx_gene_length < 100:
@@ -2026,6 +2029,8 @@ if args.tree and args.tree_order:  # Queries in postscript file will be presente
 	arrowList = []
 	domainList = []
 	accession_List = []
+	gene_start_list=[]
+	gene_end_list=[]
 	#y = df[0].nunique()/4.5
 
 
@@ -2056,6 +2061,8 @@ if args.tree and args.tree_order:  # Queries in postscript file will be presente
 				id1 = str(items1[9])
 				accession = str(items1[0])
 				accession_List.append(accession)
+				gene_start_list.append(x_gene_start)
+				gene_end_list.append(x_gene_end)
 				# 3a. When genes are to small the arrow shape is distorted because the coordinates are too close to each other.
 				#This makes these genes longer to keep the shape of the arrow. 
 				if dx_gene_length < 100:
