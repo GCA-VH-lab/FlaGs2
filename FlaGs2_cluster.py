@@ -5,9 +5,17 @@ __email__		= "jose.n.kuahara@gmail.com, chayan.sust7@gmail.com"
 
 from Bio import SeqIO
 from Bio import Entrez
-#from Bio.Seq import Seq
-#from Bio.SeqRecord import SeqRecord
-from Bio.Alphabet import generic_protein, IUPAC
+try:
+    from Bio.Alphabet import generic_dna
+except ImportError:
+    generic_dna = "DNA"
+from Bio import SeqIO
+try:
+    from Bio.Alphabet import generic_dna
+except ImportError:
+    generic_dna = None
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
 import math, re
 import argparse
 import ftplib
@@ -26,12 +34,12 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import matplotlib as mpl
 from matplotlib.pyplot import figure, tight_layout
-from collections import Counter 
+from collections import Counter  
 import ete3
 
 os.environ['QT_QPA_PLATFORM']='offscreen'
 
-usage= ''' Description:  Identify flanking genes and cluster them based on similarity and visualize the structure; Requirement= Python3, BioPython; tkinter ; Optional Requirement= ETE3. '''
+usage= ''' Description:  Identify flanking genes and cluster them based on similarity and visualize the structure; Requirement= Python3, BioPython. '''
 
 
 parser = argparse.ArgumentParser(description=usage)
@@ -749,7 +757,7 @@ if not args.localGenomeList:
 	else:
 		genDbSize='0'
 
-	ftp = ftplib.FTP('ftp.ncbi.nih.gov', 'anonymous', 'anonymous@ftp.ncbi.nih.gov')
+	ftp = ftplib.FTP('ftp.ncbi.nlm.nih.gov', 'anonymous', 'anonymous@ftp.ncbi.nlm.nih.gov')
 	ftp.cwd("/genomes/refseq") # move to refseq directory
 
 	filenames = ftp.nlst() # get file/directory names within the directory
@@ -760,7 +768,7 @@ if not args.localGenomeList:
 		else:
 			pass
 
-	ftp_gen = ftplib.FTP('ftp.ncbi.nih.gov', 'anonymous', 'anonymous@ftp.ncbi.nih.gov')
+	ftp_gen = ftplib.FTP('ftp.ncbi.nlm.nih.gov', 'anonymous', 'anonymous@ftp.ncbi.nlm.nih.gov')
 	ftp_gen.cwd("/genomes/genbank") # move to refseq directory
 
 	filenames = ftp_gen.nlst() # get file/directory names within the directory
@@ -782,7 +790,7 @@ if not args.localGenomeList:
 				bioDict[Line[1]]=Line[0]
 				assemblyName[Line[0]]=Line[0]
 
-	ftp_gen = ftplib.FTP('ftp.ncbi.nih.gov', 'anonymous', 'anonymous@ftp.ncbi.nih.gov')
+	ftp_gen = ftplib.FTP('ftp.ncbi.nlm.nih.gov', 'anonymous', 'anonymous@ftp.ncbi.nlm.nih.gov')
 	ftp_gen.cwd("/genomes/genbank") # move to refseq directory
 
 
@@ -1079,7 +1087,7 @@ for query in NqueryDict:
 						ftpsplitDir = ftpLine.split('/')[3:]
 						ftp_path = '/'.join(map(str,ftpsplitDir))
 						#time.sleep(1)
-						ftp = ftplib.FTP('ftp.ncbi.nih.gov', 'anonymous', 'anonymous@ftp.ncbi.nih.gov')
+						ftp = ftplib.FTP('ftp.ncbi.nlm.nih.gov', 'anonymous', 'anonymous@ftp.ncbi.nlm.nih.gov')
 						ftp.cwd('/'+ftp_path)
 						files = ftp.nlst()
 						FileToDownload=[]
