@@ -12,4 +12,4 @@ Running FlaGs_tkinter_output.py with the .tsv file generated from FlaGs2 as inpu
 
 Run FlaGs2_cluster.py to bypass ETE3 display dependency.
 
-Run FlaGS2_testing.py for faster downloads (may be buggy)
+Run file_testing versions for faster downloads (may be buggy)
