@@ -9,7 +9,3 @@ Version 1.2.0:
 * General optimization and stability improvements
 
 Running FlaGs_tkinter_output.py with the .tsv file generated from FlaGs2 as input will create a graphical output as the original version of FlaGs. 
-
-Run FlaGs2_cluster.py to bypass ETE3 display dependency.
-
-Run file_testing versions for faster downloads (may be buggy)
