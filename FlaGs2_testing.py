@@ -44,10 +44,10 @@ def parse_arguments():
     parser.add_argument("-o", "--out_prefix", required= True, help=" Any Keyword to define your output eg. MyQuery ")
     parser.add_argument("-c", "--cpu", help="Maximum number of parallel CPU workers to use for multithreads. ")
     parser.add_argument("-db", "--hmmdb", help=" Input hmm database to enable domain search in queries and flanking genes through hmmscan. Eg. Pfam-A.hmm, cd_all.hmm")
-    #adding cutoff threshhold
     parser.add_argument("-k", "--keep", action="store_true", help=" If you want to keep the intermediate files eg. gff3 use [-k]. By default it will remove. ")
-    parser.add_argument("-v", "--version", action="version", version='%(prog)s 1.1.5')
+    parser.add_argument("-v", "--version", action="version", version='%(prog)s 1.2.0')
     parser.add_argument("-vb", "--verbose", action="store_true", help=" Use this option to see the work progress for each query as stdout. ")
+    parser.add_argument("-cl", "--cluster", action="store_true", help=" Use this option to bypass ETE3 display requirement ")
     args = parser.parse_args()
     return args
 
@@ -91,8 +91,6 @@ def check_arguments(args):
 		if args.localGenomeDirectory:
 			print("Arguments invalid: Please use -l flag to make -ld flag working")
 			sys.exit()
-
-#small utility functions
 
 def checkBioPython(): #Checking Biopython Version
 	return Bio.__version__
@@ -211,85 +209,78 @@ def similarityID (item1, item2):
 	else:
 		return 'Changed'
 
-#spLocalrelated
+# Per-assembly faa cache: faa_id -> {acc_id: (description, seq_str)}
+# Each .faa.gz is parsed exactly once; all downstream helpers read from this cache.
+_faa_cache = {}
 
-def spLocal(faa,acc): #getting species name using assembly number or accession
+def _load_faa(faa):
+	if faa in _faa_cache:
+		return
+	records = {}
+	faaFile = faa + '.faa.gz'
+	try:
+		with gzip.open(localDir + faaFile, "rt") as fastaSeq:
+			for record in SeqIO.parse(fastaSeq, "fasta"):
+				records[record.id] = (record.description, str(record.seq))
+	except Exception:
+		pass
+	_faa_cache[faa] = records
+
+def spLocal(faa, acc): #getting species name using assembly number or accession
 	if faa in speciesNameFromOnlineDict:
 		return speciesNameFromOnlineDict[faa]
-	else:
-		faaFile=faa+'.faa.gz'
-		fastaSeq = gzip.open(localDir+faaFile, "rt")
-		for record in SeqIO.parse(fastaSeq, "fasta"):
-			if record.id==acc:
-				if args.redundant:
-					return remBadChar(record.description.split('[')[-1][:-1])+'_'+remBadChar(faa)
-				else:
-					return remBadChar(record.description.split('[')[-1][:-1])
+	_load_faa(faa)
+	entry = _faa_cache[faa].get(acc)
+	if entry:
+		desc = entry[0]
+		species = remBadChar(desc.split('[')[-1][:-1])
+		return species + '_' + remBadChar(faa) if args.redundant else species
 
-def desLocal(faa,acc):
-	faaFile=faa+'.faa.gz'
-	fastaSeq = gzip.open(localDir+faaFile, "rt")
-	for record in SeqIO.parse(fastaSeq, "fasta"):
-		if record.id==acc:
-			return record.description.split('[')[0]
+def desLocal(faa, acc):
+	_load_faa(faa)
+	entry = _faa_cache[faa].get(acc)
+	if entry:
+		return entry[0].split('[')[0]
 
-def seqLocal(faa,acc):
-	faaFile=faa+'.faa.gz'
-	fastaSeq = gzip.open(localDir+faaFile, "rt")
-	for record in SeqIO.parse(fastaSeq, "fasta"):
-		if record.id==acc:
-			return str(record.seq)
+def seqLocal(faa, acc):
+	_load_faa(faa)
+	entry = _faa_cache[faa].get(acc)
+	if entry:
+		return entry[1]
 
 def localNone(item):
-	if item==None:
+	if item is None:
 		return '--'
-	else:
-		return item
+	return item
 
-def seqFasLocal(faa,acc): #making fasta file from accession
-	if spLocal(faa,acc):
-		faaFile=faa+'.faa.gz'
-		fastaSeq = gzip.open(localDir+faaFile, "rt")
-		for record in SeqIO.parse(fastaSeq, "fasta"):
-			if record.id==acc.split('#')[0]:
-				record.id=acc+'|'+spLocal(faa,acc)#.replace(':','_').replace('[','_').replace(']','_')
-				record.description=''
-				return record.format("fasta")
-	else:
-		faaFile=faa+'.faa.gz'
-		fastaSeq = gzip.open(localDir+faaFile, "rt")
-		for record in SeqIO.parse(fastaSeq, "fasta"):
-			if record.id==acc.split('#')[0]:
-				if args.redundant:
-					record.id=acc+'|'+remBadChar(record.description.split('[')[-1][:-1])+'_'+remBadChar(faa)#.replace(':','_').replace('[','_').replace(']','_')
-				else:
-					record.id=acc+'|'+remBadChar(record.description.split('[')[-1][:-1])
-				record.description=''
-				return record.format("fasta")
+def _species_label(faa, acc_base): #Return species label for acc_base, using spLocal or falling back to description
+	sp = spLocal(faa, acc_base)
+	if sp:
+		return sp
+	_load_faa(faa)
+	entry = _faa_cache[faa].get(acc_base)
+	if entry:
+		species = remBadChar(entry[0].split('[')[-1][:-1])
+		return species + '_' + remBadChar(faa) if args.redundant else species
+	return None
 
-def seqFasLenLocal(faa,acc): #making fasta file from accession
-	if spLocal(faa,acc):
-		faaFile=faa+'.faa.gz'
-		fastaSeq = gzip.open(localDir+faaFile, "rt")
-		for record in SeqIO.parse(fastaSeq, "fasta"):
-			if record.id==acc.split('#')[0]:
-				record.id=acc+'|'+spLocal(faa,acc)#.replace(':','_').replace('[','_').replace(']','_')
-				record.description=''
-				if record.seq:
-					return len(record.seq)
+def seqFasLocal(faa, acc): #making fasta file from accession
+	acc_base = acc.split('#')[0]
+	_load_faa(faa)
+	entry = _faa_cache[faa].get(acc_base)
+	if not entry:
+		return None
+	desc, seq = entry
+	sp = _species_label(faa, acc_base)
+	label = sp if sp else remBadChar(desc.split('[')[-1][:-1])
+	return '>'+acc+'|'+label+'\n'+seq+'\n'
 
-	else:
-		faaFile=faa+'.faa.gz'
-		fastaSeq = gzip.open(localDir+faaFile, "rt")
-		for record in SeqIO.parse(fastaSeq, "fasta"):
-			if record.id==acc.split('#')[0]:
-				if args.redundant:
-					record.id=acc+'|'+remBadChar(record.description.split('[')[-1][:-1])+'_'+remBadChar(faa)#.replace(':','_').replace('[','_').replace(']','_')
-				else:
-					record.id=acc+'|'+remBadChar(record.description.split('[')[-1][:-1])
-				record.description=''
-				if record.seq:
-					return len(record.seq)
+def seqFasLenLocal(faa, acc): #length of sequence for accession
+	acc_base = acc.split('#')[0]
+	_load_faa(faa)
+	entry = _faa_cache[faa].get(acc_base)
+	if entry and entry[1]:
+		return len(entry[1])
 
 def redundantCreate(setDict,nums):
 	if nums=='A' or nums=='a':
@@ -301,33 +292,117 @@ def redundantCreate(setDict,nums):
 			newList=random.sample(setDict,len(setDict))
 	return newList
 
-#Download assembly summary report from NCBI Refseq and genBank
-def database_loader():
-	refDb='./refSeq.db'
-	genDb='./genBank.db'
-	refDbSize, genDbSize = '0','0'
-	if os.path.isfile(refDb):
-		refDbSize=os.path.getsize(refDb)
-	if os.path.isfile(genDb):
-		genDbSize=os.path.getsize(genDb)
+#On-demand assembly info lookup via Entrez
+_assembly_info_cache = {}
+_bioproject_assembly_cache = {}
 
-	ftp = ftplib.FTP('ftp.ncbi.nlm.nih.gov', 'anonymous', 'anonymous@ftp.ncbi.nih.gov')
-	ftp.cwd("/genomes/refseq") # move to refseq directory
+def _batch_fetch_assembly_summaries(uid_list): #Fetch Entrez assembly esummary records for a list of UIDs (strings)
+	for attempt in range(1, 6):
+		try:
+			time.sleep(ncbi_time)
+			handle = Entrez.esummary(db="assembly", id=",".join(uid_list), report="full")
+			record = Entrez.read(handle, validate=False)
+			handle.close()
+			return record["DocumentSummarySet"]["DocumentSummary"]
+		except Exception:
+			if attempt == 5:
+				return []
+			time.sleep(ncbi_time * attempt)
 
-	filenames = ftp.nlst() # get file/directory names within the directory
-	if 'assembly_summary_refseq.txt' in filenames:
-		ftp.sendcmd("TYPE i")
-		if int(ftp.size('assembly_summary_refseq.txt'))!=int(refDbSize):#check if the previously downloaded db exists and if that's updated to recent one
-			ftp.retrbinary('RETR ' + 'assembly_summary_refseq.txt', open('refSeq.db', 'wb').write) # get the assembly summary from refseq
+def batch_fetch_assembly_info(accession_list): #Populate _assembly_info_cache for all accessions in accession_list
+	to_fetch = [a for a in accession_list if a not in _assembly_info_cache]
+	if not to_fetch:
+		return
+	# Batch esearch: NCBI allows comma-separated accessions in one query
+	BATCH = 200
+	for start in range(0, len(to_fetch), BATCH):
+		chunk = to_fetch[start:start + BATCH]
+		for attempt in range(1, 6):
+			try:
+				time.sleep(ncbi_time)
+				term = " OR ".join(a + "[Assembly Accession]" for a in chunk)
+				search_handle = Entrez.esearch(db="assembly", term=term, retmax=len(chunk))
+				search_record = Entrez.read(search_handle)
+				search_handle.close()
+				uid_list = search_record.get("IdList", [])
+				if not uid_list:
+					break
+				docs = _batch_fetch_assembly_summaries(uid_list)
+				for doc in docs:
+					acc = doc.get("AssemblyAccession", "")
+					organism = doc.get("Organism", acc)
+					ftp_path = doc.get("FtpPath_RefSeq", "") or doc.get("FtpPath_GenBank", "")
+					if acc:
+						_assembly_info_cache[acc] = (organism, ftp_path)
+				break
+			except Exception:
+				if attempt == 5:
+					break
+				time.sleep(ncbi_time * attempt)
+	# Any accession that still has no cache entry gets a sentinel
+	for a in to_fetch:
+		if a not in _assembly_info_cache:
+			_assembly_info_cache[a] = (a, '')
 
-	ftp_gen = ftplib.FTP('ftp.ncbi.nlm.nih.gov', 'anonymous', 'anonymous@ftp.ncbi.nih.gov')
-	ftp_gen.cwd("/genomes/genbank") # move to genbank directory
+def fetch_assembly_info(gcf_accession): #Return (organism_name, ftp_path) for a single GCF/GCA accession.
+	if gcf_accession in _assembly_info_cache:
+		return _assembly_info_cache[gcf_accession]
+	# Single-accession fallback (used by _download_assembly for on-demand retries)
+	batch_fetch_assembly_info([gcf_accession])
+	return _assembly_info_cache.get(gcf_accession, (gcf_accession, ''))
 
-	filenames = ftp_gen.nlst() # get file/directory names within the directory
-	if 'assembly_summary_genbank.txt' in filenames:
-		ftp_gen.sendcmd("TYPE i")
-		if int(ftp_gen.size('assembly_summary_genbank.txt'))!=int(genDbSize):#check if the previously downloaded db exists and if that's updated to recent one
-			ftp_gen.retrbinary('RETR ' + 'assembly_summary_genbank.txt', open('genBank.db', 'wb').write) # get the assembly summary from refseq
+def batch_fetch_assembly_from_bioproject(bioproj_id_list): #Populate _bioproject_assembly_cache for all BioProject IDs
+	to_fetch = [b for b in bioproj_id_list if b not in _bioproject_assembly_cache]
+	if not to_fetch:
+		return
+	for attempt in range(1, 6):
+		try:
+			time.sleep(ncbi_time)
+			link_handle = Entrez.elink(
+				dbfrom="bioproject", db="assembly",
+				id=",".join(to_fetch))
+			link_records = Entrez.read(link_handle)
+			link_handle.close()
+			bioproj_to_uids = {}
+			for rec, bp_id in zip(link_records, to_fetch):
+				uids = []
+				if rec.get("LinkSetDb"):
+					for link in rec["LinkSetDb"][0]["Link"]:
+						uids.append(link["Id"])
+				bioproj_to_uids[bp_id] = uids
+			all_uids = list({uid for uids in bioproj_to_uids.values() for uid in uids})
+			uid_to_acc = {}
+			if all_uids:
+				docs = _batch_fetch_assembly_summaries(all_uids)
+				for doc in docs:
+					acc = doc.get("AssemblyAccession", "")
+					uid = str(doc.attributes.get("uid", ""))
+					if uid and acc:
+						uid_to_acc[uid] = acc
+			for bp_id, uids in bioproj_to_uids.items():
+				gcf_acc = None
+				gca_acc = None
+				for uid in uids:
+					acc = uid_to_acc.get(uid, "")
+					if acc.startswith("GCF_") and gcf_acc is None:
+						gcf_acc = acc
+					elif acc.startswith("GCA_") and gca_acc is None:
+						gca_acc = acc
+				_bioproject_assembly_cache[bp_id] = gcf_acc or gca_acc
+			return
+		except Exception:
+			if attempt == 5:
+				for bp_id in to_fetch:
+					if bp_id not in _bioproject_assembly_cache:
+						_bioproject_assembly_cache[bp_id] = None
+				return
+			time.sleep(ncbi_time * attempt)
+
+def fetch_assembly_from_bioproject(bioproj_id): #Return an assembly accession (GCF preferred, else GCA) for a BioProject ID.
+	if bioproj_id in _bioproject_assembly_cache:
+		return _bioproject_assembly_cache[bioproj_id]
+	batch_fetch_assembly_from_bioproject([bioproj_id])
+	return _bioproject_assembly_cache.get(bioproj_id)
 
 def query_list_builder(queryFile, expect_single_column):
     queryList=[]
@@ -347,8 +422,6 @@ def query_list_builder(queryFile, expect_single_column):
                 print('The submitted query might include characters not found in NCBI protein accessions eg. > , # , ! etc. Please provide correct format, Thanks!')
                 sys.exit()
     return queryList
-
-#entrez communication 
 
 def batch_accession_from_wp(accession_list):
 	accession_list = list(accession_list)
@@ -460,8 +533,6 @@ def accession_from_wp(accession_nr):
 
 def seq_from_wp(accession_nr):
 	if accession_nr[-1]!='*':
-		#Entrez.email = "_@gmail.com"  # If you do >3 entrez searches on NCBI per second, your ip will be
-		# blocked, warning is sent to this email.
 		try:
 			time.sleep(ncbi_time)
 			handle = Entrez.efetch(db="protein", id=accession_nr, rettype="gbwithparts", retmode="text")
@@ -540,7 +611,7 @@ def identicalProtID_WP(accnr): #searching for identical proteins
 		return accnr
 
 
-def identicalProtID_WP_Sp(accnr): #searching for identical proteins with same assembly  for 'NP_417570.1' > WP_000785722.1|GCF_000005845.2
+def identicalProtID_WP_Sp(accnr): #searching for identical proteins with same assembly
 	try:
 		iden_prots = _fetch_ipg_text(accnr)
 	except RuntimeError:
@@ -576,7 +647,7 @@ def identicalProtID_WP_Sp(accnr): #searching for identical proteins with same as
 	else:
 		return '#'
 
-def identicalProtID_redundant(accnr): #searching for identical proteins with same assembly  for 'NP_417570.1' > WP_000785722.1|GCF_000005845.2
+def identicalProtID_redundant(accnr): #searching for identical proteins with same assembly
 	try:
 		iden_prots = _fetch_ipg_text(accnr)
 	except RuntimeError:
@@ -606,20 +677,23 @@ def reporter(i1,i2,i3,i4,i5):
 
 def _download_assembly(query, item, query_idx, total_queries):
 
-	if args.localGenomeList or item not in accnr_list_dict:
+	if args.localGenomeList:
 		return item, None, False
 
-	species_label = getSpeciesFromGCF(item, accnr_list_dict[item].split('\t')[0])
+	organism_name, ftp_path = fetch_assembly_info(item)
+	if not ftp_path:
+		return item, None, False
 
+	species_label = getSpeciesFromGCF(item, organism_name)
+
+	ftp_relative_path = '/'.join(ftp_path.split('/')[3:])
 	for attempt in range(1, 6):
 		AssemDown  = 0
 		AssemFailed = 0
 		try:
-			ftpLine      = accnr_list_dict[item].split('\t')[1]
-			ftp_path     = '/'.join(ftpLine.split('/')[3:])
 			ftp = ftplib.FTP('ftp.ncbi.nlm.nih.gov', 'anonymous', 'anonymous@ftp.ncbi.nih.gov')
 			ftp.set_pasv(True)
-			ftp.cwd('/' + ftp_path)
+			ftp.cwd('/' + ftp_relative_path)
 			files = ftp.nlst()
 			FileToDownload = [f for f in files
 							  if '_genomic.gff.gz' in f or '_protein.faa.gz' in f]
@@ -665,10 +739,7 @@ def _download_assembly(query, item, query_idx, total_queries):
 
 	return item, species_label, False
 
-#output functions 
-
 def write_operon_tsv(out_filename, query_order):
-	"""Write operon TSV and return (nPos, pPos) coordinate lists."""
 	nPos=[]
 	pPos=[]
 	with open(out_filename, 'w') as opOut:
@@ -699,7 +770,6 @@ def write_operon_tsv(out_filename, query_order):
 	return nPos, pPos
 
 def draw_operon_pdf(tsv_filename, pdf_filename):
-	"""Read an operon TSV and render it as a PDF."""
 	mpl.rcParams['pdf.fonttype'] = 42
 	mpl.rcParams['ps.fonttype'] = 42
 	arrowList = []
@@ -790,21 +860,23 @@ else:
 	s=5
 if not args.localGenomeList:
 	if args.api_key:
-		Entrez.api_key = args.api_key #Valid API-key allows 10 queries per seconds, which makes the tool run faster
+		Entrez.api_key = args.api_key
 else:
 	if args.api_key:
 		print('Since FlaGs2 will use Local Data api_key is not necessary, Thanks!')
 		sys.exit()
 core = int(args.cpu) if args.cpu else 1
-print("\nStarting FlaGs2 version 1.1.5 \nPlease only run one instance of FlaGs2 at a time to avoid making more queries than NCBI’s limit.")
+if args.cluster:
+	import ete3
+	os.environ['QT_QPA_PLATFORM']='offscreen'
+print("\nStarting FlaGs2 version 1.2.0 \nPlease only run one instance of FlaGs2 at a time to avoid making more queries than NCBI’s limit.")
 print('For more information, please check https://ncbiinsights.ncbi.nlm.nih.gov/2017/11/02/new-api-keys-for-the-e-utilities/ \n')
-print('Checking for RefSeq and Genbank summary files and downloading if needed ... \n')
 
 Entrez.tool = 'FlaGs2'
 ncbi_time= 0.4
 timeout = 10
 socket.setdefaulttimeout(timeout)
-Entrez.email = args.recipients[0] #User email
+Entrez.email = args.recipients[0]
 Entrez.max_tries = 5
 Entrez.sleep_between_tries = 60
 
@@ -814,43 +886,7 @@ if args.localGenomeList: queryList=query_list_builder(args.localGenomeList, Fals
 else:
 	if args.proteinList: queryList=query_list_builder(args.proteinList, True)
 	else:queryList=query_list_builder(args.assemblyList, False)
-	database_loader()
-	assemblyName={}
-	bioDict={} #bioproject as keys and assemble number (eg.GCF_000001765.1) as value
-	accnr_list_dict={} #create a dictionary accessionNumber is a key and Organism name and ftp Gff3 download Link as value
-	with open('refSeq.db', 'r') as fileIn:
-		for line in fileIn:
-			if line[0]!='#':
-				Line=line.rstrip().split('\t')
-				accnr_list_dict[Line[0]]= Line[7]+'\t'+Line[19]
-				bioDict[Line[1]]=Line[0]
-				assemblyName[Line[0]]=Line[0]
-	ftp_gen = ftplib.FTP('ftp.ncbi.nlm.nih.gov', 'anonymous', 'anonymous@ftp.ncbi.nih.gov')
-	ftp_gen.cwd("/genomes/genbank") # move to refseq directory
-	assemblyName_GCA={}
-	bioDict_gen={}
-	accnr_list_dict_gen={} #create a dictionary accessionNumber is a key and Organism name and ftp Gff3 download Link as value
-	with open('genBank.db', 'r') as fileIn:
-		for line in fileIn:
-			if line[0]!='#':
-				Line=line.rstrip().split('\t')
-				if len(Line)>19:
-					if Line[18]=='identical':
-						if Line[17] in accnr_list_dict:
-							bioDict_gen[Line[1]]=Line[0]
-							accnr_list_dict_gen[Line[0]]= accnr_list_dict[Line[17]]
-							assemblyName_GCA[Line[0]]=Line[17]
-						else:
-							accnr_list_dict_gen[Line[0]]=Line[7]+'\t'+Line[19]
-					else:
-						accnr_list_dict_gen[Line[0]]=Line[7]+'\t'+Line[19]
-
-	bioDict.update(bioDict_gen)
-	accnr_list_dict.update(accnr_list_dict_gen)
-	assemblyName.update(assemblyName_GCA)
-	ftp_gen.close()
-
-	print ('\n'+ '>> Database Downloaded. Cross-checking of the accession list in progress ...'+ '\n')
+	print ('\n'+ '>> Cross-checking of the accession list in progress ...'+ '\n')
 q=0
 ne=0
 queryDict={} #protein Id as query and a set of assembly number as value [either All or Species of interest]
@@ -884,8 +920,12 @@ if not args.localGenomeList:
 		xp_single_results = (batch_accession_from_xp([queryList[i][0] for i in xp_single_indices])
 							 if xp_single_indices else {})
 		other_resolved = {}
-		for i in other_single_indices:
-			other_resolved[i] = identicalProtID(queryList[i][0])
+		if other_single_indices:
+			with ThreadPoolExecutor(max_workers=min(core, len(other_single_indices))) as ex:
+				future_to_idx = {ex.submit(identicalProtID, queryList[i][0]): i
+								 for i in other_single_indices}
+				for future in as_completed(future_to_idx):
+					other_resolved[future_to_idx[future]] = future.result()
 
 		other_needs_wp = [i for i in other_single_indices
 						  if other_resolved[i] != queryList[i][0]
@@ -908,10 +948,14 @@ if not args.localGenomeList:
 
 		special_exceptional_wp = {}
 		special_special_out    = {}
-		for i in other_special:
-			rid = other_resolved[i]
-			special_exceptional_wp[i] = identicalProtID_WP(rid)
-			special_special_out[i]    = identicalProtID_WP_Sp(rid)
+		if other_special:
+			def _resolve_special(i):
+				rid = other_resolved[i]
+				return i, identicalProtID_WP(rid), identicalProtID_WP_Sp(rid)
+			with ThreadPoolExecutor(max_workers=min(core, len(other_special))) as ex:
+				for i, ewp, sout in ex.map(_resolve_special, other_special):
+					special_exceptional_wp[i] = ewp
+					special_special_out[i]    = sout
 
 		exceptional_wp_ids = list({v for v in special_exceptional_wp.values() if v[:3]=='WP_'})
 		exceptional_wp_results = (batch_accession_from_wp(exceptional_wp_ids)
@@ -921,6 +965,27 @@ if not args.localGenomeList:
 							 if xp_paired_indices else {})
 		wp_paired_results = (batch_accession_from_wp([queryList[i][0] for i in wp_paired_indices])
 							 if wp_paired_indices else {})
+
+		# --- batch pre-fetch assembly info and bioproject→assembly mappings ---
+		# Collect every assembly accession appearing in WP results so that
+		# _download_assembly never makes individual Entrez lookups later.
+		all_gcf_accs = set()
+		for res in [wp_single_results, other_wp_results, exceptional_wp_results, wp_paired_results]:
+			for v in res.values():
+				if v and v != {'NAI'}:
+					all_gcf_accs.update(v)
+		if all_gcf_accs:
+			batch_fetch_assembly_info(list(all_gcf_accs))
+
+		# Collect every BioProject ID appearing in XP results so that
+		# fetch_assembly_from_bioproject never makes individual Entrez lookups.
+		all_bioproj_ids = set()
+		for res in [xp_single_results, other_xp_results, xp_paired_results]:
+			for v in res.values():
+				if v and v != {'NAI'}:
+					all_bioproj_ids.update(v)
+		if all_bioproj_ids:
+			batch_fetch_assembly_from_bioproject(list(all_bioproj_ids))
 
 		for idx, query in enumerate(queryList):
 			q+=1
@@ -937,29 +1002,30 @@ if not args.localGenomeList:
 			if args.verbose:
 				print('\t Checking Query '+ query[0] +' ....'+ '('+str(q)+'/'+str(len(queryList))+')')
 			if len(query)<2:
-				if query[0][:2]=='WP' and query[0][-2]=='.': #WP Accession full WP_000785722.1
+				if query[0][:2]=='WP' and query[0][-2]=='.': 
 					accession_from_wp_out=wp_single_results.get(query[0], False)
 					if accession_from_wp_out:
 						queryDict[query[0]+'#'+str(q)]=sortGCFvsGCA(accession_from_wp_out)
 					else:
 						ne+=1
 						print(query[0], file= fbad)
-				elif query[0][:2]=='XP' and query[0][-2]=='.': #XP Accession full XP_003256407.1
+				elif query[0][:2]=='XP' and query[0][-2]=='.':
 					accession_from_xp_out=xp_single_results.get(query[0], False)
 					if accession_from_xp_out:
 						assemList=[]
 						for bioprojs in accession_from_xp_out:
-							if bioprojs in bioDict:
-								assemList.append(bioDict[bioprojs])
+							resolved_assembly = fetch_assembly_from_bioproject(bioprojs)
+							if resolved_assembly:
+								assemList.append(resolved_assembly)
 						if assemList:
 							queryDict[query[0]+'#'+str(q)]=sortGCFvsGCA(set(assemList))
 					else:
 						ne+=1
 						print(query[0], file= fbad)
-				else: #other accessions can be XP_003256407 , WP_000785722 too
+				else: 
 					identicalProtID_Out=other_resolved[idx]
-					if identicalProtID_Out!=query[0]: #can be anything XP_ or WP_ or YP_ or NP_
-						if identicalProtID_Out[:-3]!='XP_': #Not XPs
+					if identicalProtID_Out!=query[0]: 
+						if identicalProtID_Out[:-3]!='XP_': 
 							accession_from_wp_ID_out=other_wp_results.get(identicalProtID_Out, False)
 							if accession_from_wp_ID_out:
 								asset=set()
@@ -970,21 +1036,22 @@ if not args.localGenomeList:
 							else:
 								ne+=1
 								print(query[0], file= fbad)
-						if identicalProtID_Out[:-3]=='XP_': #if XPs
+						if identicalProtID_Out[:-3]=='XP_': 
 							accession_from_xp_ID_out=other_xp_results.get(identicalProtID_Out, False)
 							if accession_from_xp_ID_out:
 								assemList=[]
 								for bioprojs in accession_from_xp_ID_out:
-									if bioprojs in bioDict:
-										assemList.append(bioDict[bioprojs])
+									resolved_assembly = fetch_assembly_from_bioproject(bioprojs)
+									if resolved_assembly:
+										assemList.append(resolved_assembly)
 								if assemList:
 									queryDict[identicalProtID_Out+'#'+str(q)+'.'+query[0]]=sortGCFvsGCA(set(assemList))
 							else:
 								ne+=1
 								print(query[0], file= fbad)
-					elif identicalProtID_Out==query[0]: #excluding XP Wp pre  #YP NP
+					elif identicalProtID_Out==query[0]: 
 						exceptionalWP_out = special_exceptional_wp[idx]
-						special_out = special_special_out[idx] #list Query GCF
+						special_out = special_special_out[idx] 
 						if not args.redundant:
 							if special_out!='#':
 								asset=set()
@@ -1027,7 +1094,6 @@ if not args.localGenomeList:
 									for elements in assembly_from_identical:
 										asset.add(elements)
 									if len(asset)>0:
-										#queryDict[identicalProtID_Out+'#'+str(q)+'.'+query[0]]=sortGCFvsGCA(asset)
 										if query[0]!=exceptionalWP_out:
 											queryDict[exceptionalWP_out+'#'+str(q)+'.'+query[0]]=sortGCFvsGCA(asset)
 										else:
@@ -1037,20 +1103,20 @@ if not args.localGenomeList:
 									print(query[0], file= fbad)
 
 			else:
-				if query[0][:3]=='XP_' and query[0][-2]=='.': #XP Accession
+				if query[0][:3]=='XP_' and query[0][-2]=='.':
 					asset=set()
 					accession_from_xp_out=xp_paired_results.get(query[0], False)
 					if accession_from_xp_out:
 						for bioprojs in accession_from_xp_out:
-							if bioprojs in bioDict:
-								if bioDict[bioprojs]==query[1]:
-									asset.add(query[1])
+							resolved_assembly = fetch_assembly_from_bioproject(bioprojs)
+							if resolved_assembly and resolved_assembly==query[1]:
+								asset.add(query[1])
 						if len(asset)>0:
 							queryDict[query[0]+'#'+str(q)]=asset
 					else:
 						ne+=1
 						print(query[0], file= fbad)
-				elif query[0][:3]!='XP_' and query[0][-2]=='.': #not XP Accession
+				elif query[0][:3]!='XP_' and query[0][-2]=='.':
 					asset=set()
 					accession_from_wp_out=wp_paired_results.get(query[0], False)
 					if accession_from_wp_out:
@@ -1145,9 +1211,6 @@ else:
 					NqueryDict[query+'.'+str(redun)]=list(str(newRed).split())
 			else:
 				NqueryDict[query]=random.sample(queryDict[query],1)
-
-#print(NqueryDict)
-
 if not args.localGenomeList:
 	print('\n> Downloading Genome Assembly Files from NCBI FTP Server \n')
 
@@ -1181,26 +1244,22 @@ newQ = len(NqueryDict)
 
 for query in NqueryDict:
 	for item in NqueryDict[query]:
+		acc_id = query.split('#')[0]
 		if args.localGenomeList:
-			faaFile=item+'.faa.gz'
-			fastaSeq = gzip.open(localDir+faaFile, "rt")
-			for record in SeqIO.parse(fastaSeq, "fasta"):
-				if record.id==query.split('#')[0]:
-					if args.redundant:
-						speciesNameFromOnlineDict[item]=remBadChar(record.description.split('[')[-1][:-1])+'_'+remBadChar(item)
-					else:
-						speciesNameFromOnlineDict[item]=remBadChar(record.description.split('[')[-1][:-1])
+			_load_faa(item)
+			entry = _faa_cache[item].get(acc_id)
+			if entry:
+				species = remBadChar(entry[0].split('[')[-1][:-1])
+				speciesNameFromOnlineDict[item] = species + '_' + remBadChar(item) if args.redundant else species
 		else:
 			if item not in speciesNameFromOnlineDict or speciesNameFromOnlineDict[item]=='Nothing':
 				faaFile=item+'.faa.gz'
 				if os.path.isfile(localDir+faaFile):
-					fastaSeq = gzip.open(localDir+faaFile, "rt")
-					for record in SeqIO.parse(fastaSeq, "fasta"):
-						if record.id==query.split('#')[0]:
-							if args.redundant:
-								speciesNameFromOnlineDict[item]=remBadChar(record.description.split('[')[-1][:-1])+'_'+remBadChar(item)
-							else:
-								speciesNameFromOnlineDict[item]=remBadChar(record.description.split('[')[-1][:-1])
+					_load_faa(item)
+					entry = _faa_cache[item].get(acc_id)
+					if entry:
+						species = remBadChar(entry[0].split('[')[-1][:-1])
+						speciesNameFromOnlineDict[item] = species + '_' + remBadChar(item) if args.redundant else species
 				else:
 					speciesNameFromOnlineDict[item]=item+'#not_found'
 
@@ -1210,9 +1269,6 @@ if args.keep:
 		for query in NqueryDict:
 			for item in NqueryDict[query]:
 				print(item, query.split('#')[0], speciesNameFromOnlineDict[item], sep='\t', file=asmOut)
-
-#print(NqueryDict) #{'WP_019504790.1#1': ['GCF_000332195.1'], 'WP_028108719.1#2': ['GCF_000422645.1'], 'WP_087820443.1#3': ['GCF_900185565.1']}
-
 print('\n'+'>> Input file assessment report: ')
 print('\t'+'Discarded protein ids with improper accession : '+str(ne)+'. See "'+args.out_prefix+'_NameError.txt'+'" file for details.')
 print('\t'+'Discarded protein ids lacking proper information in RefSeq DB : '+str(nai)+'. See "'+args.out_prefix+'_Insufficient_Info_In_DB.txt'+'" file for details.')
@@ -1238,18 +1294,17 @@ for query in NqueryDict:
 	if args.verbose:
 		print('\n'+'> '+str(count)+' in process out of '+str(newQ)+' ... '+'\n')
 		print('Query Name =', query.split('#')[0], '\n')
-	for item in NqueryDict[query]:  #{'WP_019504790.1#1': ['GCF_000332195.1'],NqueryDict
+	for item in NqueryDict[query]:
 		a=0
 		LineList=[]
-		geneProt={} # 'gene2504': 'WP_092248795.1', 'gene1943': 'tRNA'
-		geneChrom={} #'gene1708': 'NZ_MJLP01000030.1'
-		#item='GCF_'+items[4:]
+		geneProt={}
+		geneChrom={}
 		speciesNameFromDB=speciesNameFromOnlineDict[item]
 		gff_gz=localDir+item+'.gff.gz'
 		if os.path.isfile(gff_gz):
 			LineList=[]
-			geneProt={} # 'gene2504': 'WP_092248795.1', 'gene1943': 'tRNA'
-			geneChrom={} #'gene1708': 'NZ_MJLP01000030.1'
+			geneProt={} 
+			geneChrom={}
 			with gzip.open(localDir+item+'.gff.gz', 'rb') as gffIn: #Download and read gff.gz
 				for line in gffIn:
 					if line.decode('utf-8')[0]!='#':
@@ -1260,18 +1315,14 @@ for query in NqueryDict:
 									if 'GeneID:' in Line[8]:
 										geneProt[getGeneId(Line[8])]=Line[8].split(';')[3].split('=')[1]
 										geneChrom[getGeneId(Line[8])]=Line[0]
-										#print(getGeneId(Line[8]), Line[8].split(';')[3].split('=')[1], Line[0], 'gpc#')
 								else:
-									#print(Line[8].split(';')[1].split('=')[1], Line[8].split(';')[3].split('=')[1], Line[0], 'gpc#')
 									geneProt[Line[8].split(';')[1].split('=')[1]]=Line[8].split(';')[3].split('=')[1]
 									geneChrom[Line[8].split(';')[1].split('=')[1]]=Line[0]
-									##print(geneProt)>'GeneID:187667': 'NP_493855.2' NP_417570.1 gene-b3099
 						if Line[2][-4:]=='gene':
 							a+=1
 							if query.split('_')[0]=='XP':
 								if 'GeneID:' in Line[8]:
 									newGene=str(a)+'\t'+getGeneId_gene(Line[8])+'\t'+ Line[3]+'\t'+Line[4]+'\t'+ Line[6]+ '\t'+ Line[0]
-									#print(newGene) #1	GeneID:353377	3747	3909	-	NC_003279.8
 									LineList.append(newGene.split('\t'))
 									for genDes in Line[8].split(';'):
 										if 'gene_biotype=' in genDes:
@@ -1279,20 +1330,20 @@ for query in NqueryDict:
 												geneProt[getGeneId_gene(Line[8])]=genDes.split('=')[1]+'_'+query.split('#')[1]+'.'+str(random.randint(0,int(s)*2-1))+'*'
 							else:
 								newGene=str(a)+'\t'+Line[8].split(';')[0][3:]+'\t'+ Line[3]+'\t'+Line[4]+'\t'+ Line[6]+ '\t'+ Line[0]
-								LineList.append(newGene.split('\t')) #1	   gene3006		10266   10342   -	   NZ_FPCC01000034.1
+								LineList.append(newGene.split('\t'))
 								for genDes in Line[8].split(';'):
 									if 'gene_biotype=' in genDes:
 										if Line[8].split(';')[0][3:] not in geneProt:
 											geneProt[Line[8].split(';')[0][3:]]=genDes.split('=')[1]+'_'+query.split('#')[1]+'.'+str(random.randint(0,int(s)*2-1))+'*'
-				geneList=[] ##List of gene names coding same protein (accession), we are taking one from them
+				geneList=[]
 				for genes in geneProt:
 					if geneProt[genes]==query.split('#')[0]:
 						geneList.append(genes)
 				if len(geneList)>0:
-					rangeList=[]
+					rangeSet=set()
 					for line in LineList:
 						if geneChrom[geneList[0]]==line[5]:
-							rangeList.append(int(line[0]))
+							rangeSet.add(int(line[0]))
 					for genes in geneProt:
 						if genes==geneList[0]:
 							if query.split('#')[0]==geneProt[genes]:
@@ -1303,10 +1354,8 @@ for query in NqueryDict:
 											treeFastadict[query]=str(seqFasLocal(item,query))
 											querySeqDict[query+'|'+remBadChar(spLocal(item,query.split('#')[0]))]=str(seqLocal(item,query.split('#')[0]))
 										if speciesNameFromDB!='Nothing' or speciesNameFromDB!='':
-											#print(speciesNameFromDB, 1)
 											speciesDict[query]=speciesNameFromDB
 										else:
-											#print(spLocal(item, query.split('#')[0]), 2)
 											speciesDict[query]=spLocal(item, query.split('#')[0])
 										lineIdx = LineList.index(line)
 										query_num = query.split('#')[1]
@@ -1315,11 +1364,11 @@ for query in NqueryDict:
 										LengthDict[query]= int(LineList[lineIdx][3])-int(LineList[lineIdx][2])+1
 										udsDict={}
 										dsDict={}
-										udsDict[0]= query+'+' # O strand
+										udsDict[0]= query+'+'
 										lengthCheck=[]
 										for x in range(1,int(s)):
 											if lineIdx-x>=0 and lineIdx-x<len(LineList):
-												if rangeList.count(int(LineList[lineIdx-x][0]))>0:
+												if int(LineList[lineIdx-x][0]) in rangeSet:
 													acc_CGF_Dict[query]= LineList[lineIdx-x][-1] +'\t'+ item
 													seqDict[str(geneProt[LineList[lineIdx-x][1]])]=localNone(seqLocal(item, geneProt[LineList[lineIdx-x][1]]))
 													desDict[geneProt[LineList[lineIdx-x][1]]]=desLocal(item, geneProt[LineList[lineIdx-x][1]])
@@ -1330,7 +1379,7 @@ for query in NqueryDict:
 														normalize_strand(LineList[lineIdx][4],LineList[lineIdx-x][4])
 										for y in range(1,int(s)):
 											if lineIdx+y<len(LineList):
-												if rangeList.count(int(LineList[lineIdx+y][0]))>0:
+												if int(LineList[lineIdx+y][0]) in rangeSet:
 													acc_CGF_Dict[query]= LineList[lineIdx+y][-1] +'\t'+ item
 													seqDict[str(geneProt[LineList[lineIdx+y][1]])]=localNone(seqLocal(item,geneProt[LineList[lineIdx+y][1]]))
 													desDict[geneProt[LineList[lineIdx+y][1]]]=desLocal(item,geneProt[LineList[lineIdx+y][1]])
@@ -1420,10 +1469,8 @@ discardedGene=0
 with open (args.out_prefix+'_QueryStatus.txt', 'w') as sumOut:
 	print('#Serial', 'Status', sep='\t', file=sumOut)
 	for query in queryList:
-		#print('query',query)
 		qcount+=1
 		for item in reportDict[query[0]]:
-			#print('item',item)
 			if item in FlankFoundDict:
 				if item in accFlankDict:
 					if FlankFoundDict[item]=='Yes':
@@ -1503,44 +1550,55 @@ directory = args.out_prefix+'_flankgene.fasta'+'_cluster_out_individuals'
 if not os.path.exists(directory):
 	os.makedirs(directory)
 
-infile=open(args.out_prefix+'_flankgene.fasta'+'_cluster_out',"r").read()
 al=infilename+"_"+iters+"_"+evthresh+"_jackhits.tsv"
-outacclists=open(al,"w")
-
-percentileJack=0
-i=1
-for seqids in sorted(seqDict): #Running Jackhmmer for finding homologs
+jack_lock = threading.Lock()
+jack_jobs = [] 
+_ji = 1
+for seqids in sorted(seqDict):
 	if seqDict[seqids]!='--':
-		percentileJack+=1
-		if args.verbose:
-			if percentileJack % 5 == 0:
-				print('\t'+'>>> '+str(round(int(percentileJack)*100/b))+'%'+' Completed...'+'('+str(percentileJack)+'/'+str(b)+')')
-			if percentileJack % b == 0:
-				print('\t'+'>>> Completed ' +'\n')
-		i_f=directory+"/"+str(i)+".txt"
-		indivfile=open(i_f,"w")
-		indivfile.write(">"+seqids+'\n'+seqDict[seqids])
-		indivfile.close()
-		if args.cpu:
-			command="jackhmmer --cpu %s -N %s --incE %s --incdomE %s --tblout %s/tblout%s.txt %s  %s>%s/out%s.txt" %(core, iters, evthresh, evthresh, directory, str(i), i_f, infilename, directory, str(i))
-		else:
-			command="jackhmmer -N %s --incE %s --incdomE %s --tblout %s/tblout%s.txt %s  %s>%s/out%s.txt" %(iters, evthresh, evthresh, directory, str(i), i_f, infilename, directory, str(i))
-		os.system(command)
-		tbl=open(directory+"/tblout"+str(i)+".txt").read()
-		part=tbl.split("----------\n")[1].split("\n#")[0]
-		lines=part.splitlines()
-		acclist=[]
-		for line in lines:
-			lineList=line.split()
-			if len(lineList)>17:
-				inc=line.split()[17]
-				acc=line.split('|')[0]
-				if inc=="1":
-					acclist.append(acc)
-		outacclists.write(str(i)+"\t"+str(acclist)+"\n")
-		i=i+1
+		jack_jobs.append((_ji, seqids))
+		_ji += 1
+b = len(jack_jobs)
 
-outacclists.close()
+def _run_jackhmmer(job):
+	i, seqids = job
+	i_f = directory+"/"+str(i)+".txt"
+	with open(i_f, "w") as indivfile:
+		indivfile.write(">"+seqids+'\n'+seqDict[seqids])
+	if args.cpu:
+		command="jackhmmer --cpu %s -N %s --incE %s --incdomE %s --tblout %s/tblout%s.txt %s  %s>%s/out%s.txt" %(jack_cpus_per_job, iters, evthresh, evthresh, directory, str(i), i_f, infilename, directory, str(i))
+	else:
+		command="jackhmmer -N %s --incE %s --incdomE %s --tblout %s/tblout%s.txt %s  %s>%s/out%s.txt" %(iters, evthresh, evthresh, directory, str(i), i_f, infilename, directory, str(i))
+	subprocess.run(command, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+	tbl=open(directory+"/tblout"+str(i)+".txt").read()
+	part=tbl.split("----------\n")[1].split("\n#")[0]
+	acclist=[]
+	for line in part.splitlines():
+		lineList=line.split()
+		if len(lineList)>17:
+			if line.split()[17]=="1":
+				acclist.append(line.split('|')[0])
+	if args.verbose:
+		with jack_lock:
+			nonlocal_pct = int(i * 100 / b)
+			if i % max(1, b // 20) == 0 or i == b:
+				print('\t>>> {}% Completed... ({}/{})'.format(nonlocal_pct, i, b))
+	return (i, acclist)
+
+jack_workers_count = min(core, b) if args.cpu else min(os.cpu_count() or 4, b)
+# Each jackhmmer process gets at least 1 CPU; split evenly when parallelising
+jack_cpus_per_job = max(1, core // max(1, jack_workers_count)) if args.cpu else 1
+jack_results = {}
+with ThreadPoolExecutor(max_workers=jack_workers_count) as jack_executor:
+	jack_futures = {jack_executor.submit(_run_jackhmmer, job): job for job in jack_jobs}
+	for future in as_completed(jack_futures):
+		idx, acclist = future.result()
+		jack_results[idx] = acclist
+
+# Write results in original sequential order
+with open(al, "w") as outacclists:
+	for idx in sorted(jack_results):
+		outacclists.write(str(idx)+"\t"+str(jack_results[idx])+"\n")
 
 raw=open(al).read().strip()
 
@@ -1554,37 +1612,28 @@ for line in raw.split("\n"):
 		d[index]=(actlist)
 
 i=1
-while i<len(d)+1:	#use i and j to iterate through the combinations
+while i<len(d)+1:
 	list1=d[i]
 	j=i+1
 	while j<len(d)+1:
 		list2=d[j]
-		#print "i", i, list1, " vs ",
-		#print "j", j, list2
-		if set(list1) & (set(list2)): # if there is an intersection
-			#print "yes there is", list1, list2
+		if set(list1) & (set(list2)):
 			union=list(set(list2) | set(list1))
 			d[j]=union
-			d[i]=[] #...and empty the redundant list
+			d[i]=[]
 		j=j+1
 	i=i+1
-
-#d : {1: ['WP_000153877.1'], 2: [], 3: ['WP_000291520.1'], 4: ['WP_000342211.1'], 5: [],... 30: ['WP_055032751.1', 'WP_001246052.1']}
-
 trueAccessionCount={}
 for keys in d:
 	numbers=[]
 	for item in d[keys]:
 		numbers.append(allFlankGeneList.count(item))
 	trueAccessionCount[(';'.join(map(str,d[keys])))]=sum(numbers)
-
-#trueAccessionCount: 'WP_001229260.1;WP_001229255.1': 4
 odtrue=OrderedDict(sorted(trueAccessionCount.items(), key= lambda item:item[1],reverse=True))
 
 familyNumber=0
 with open(infilename+"_"+iters+"_"+evthresh+"_clusters.tsv","w") as clusOut:
 	for k, v in odtrue.items():
-		#print (k.split(';'), odtrue[k], v)
 		if len(k.split(';'))>0 and v>0:
 			familyNumber+=1
 			print(str(familyNumber),str(odtrue[k]),k, sep='\t', file=clusOut)
@@ -1610,10 +1659,7 @@ if args.hmmdb:
 		hmmscan_cmd = "hmmscan -E 1e-10 --cpu %s -o %s_dom.txt --domtblout %s_dom_out.txt %s %s_all.fasta"%(round(core/3), args.out_prefix, args.out_prefix, args.hmmdb, args.out_prefix)
 	else:
 		hmmscan_cmd = "hmmscan -E 1e-10 -o %s_dom.txt --domtblout %s_dom_out.txt %s %s_all.fasta"%(args.out_prefix, args.out_prefix, args.hmmdb, args.out_prefix)
-	subprocess.run(hmmscan_cmd, shell=True) #runs hmmscan
-
-	#domain search ends
-	#domain dictionary for outdesc output
+	subprocess.run(hmmscan_cmd, shell=True)
 	dom_dict={}
 	dom_key=''
 	with open(args.out_prefix+"_dom_out.txt",'r') as dom_dict_infile:
