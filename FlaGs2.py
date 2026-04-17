@@ -45,7 +45,7 @@ def parse_arguments():
     parser.add_argument("-c", "--cpu", help="Maximum number of parallel CPU workers to use for multithreads. ")
     parser.add_argument("-db", "--hmmdb", help=" Input hmm database to enable domain search in queries and flanking genes through hmmscan. Eg. Pfam-A.hmm, cd_all.hmm")
     parser.add_argument("-k", "--keep", action="store_true", help=" If you want to keep the intermediate files eg. gff3 use [-k]. By default it will remove. ")
-    parser.add_argument("-v", "--version", action="version", version='%(prog)s 1.2.0')
+    parser.add_argument("-v", "--version", action="version", version='%(prog)s 1.2.1')
     parser.add_argument("-vb", "--verbose", action="store_true", help=" Use this option to see the work progress for each query as stdout. ")
     parser.add_argument("-cl", "--cluster", action="store_true", help=" Use this option to bypass ETE3 display requirement ")
     args = parser.parse_args()
@@ -869,7 +869,7 @@ if __name__ == '__main__':
 	if args.cluster:
 		import ete3
 		os.environ['QT_QPA_PLATFORM']='offscreen'
-	print("\nStarting FlaGs2 version 1.2.0 \nPlease only run one instance of FlaGs2 at a time to avoid making more queries than NCBI’s limit.")
+	print("\nStarting FlaGs2 version 1.2.1 \nPlease only run one instance of FlaGs2 at a time to avoid making more queries than NCBI’s limit.")
 	print('For more information, please check https://ncbiinsights.ncbi.nlm.nih.gov/2017/11/02/new-api-keys-for-the-e-utilities/ \n')
 
 	Entrez.tool = 'FlaGs2'
