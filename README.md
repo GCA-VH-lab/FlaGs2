@@ -7,7 +7,7 @@ Run the shell script 'build.sh' to create a conda environment specifically for F
    
 Version 1.2.1:
 * Interactive second output file (domains)
-* Version 1.2.0:
+Version 1.2.0:
 * General optimization and stability improvements
 
 Running FlaGs_tkinter_output.py with the .tsv file generated from FlaGs2 as input will create a graphical output as the original version of FlaGs. 
