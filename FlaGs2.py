@@ -829,236 +829,251 @@ def draw_operon_pdf(tsv_filename, pdf_filename):
 	plt.savefig(pdf_filename, format='pdf', bbox_inches='tight')
 	plt.close()
 
+if __name__ == '__main__':
+	starttime = time.perf_counter()
+	args=parse_arguments()
+	check_arguments(args)
 
-starttime = time.perf_counter()
-args=parse_arguments()
-check_arguments(args)
-
-#setting parameters
-localDir='./'
-if args.ethreshold:
-	evthresh=args.ethreshold
-else:
-	evthresh="1e-10"
-if args.number:
-	iters=args.number
-else:
-	iters="3"
-if args.tree:
-	if args.tshape:
-		size=args.tshape
+	#setting parameters
+	localDir='./'
+	if args.ethreshold:
+		evthresh=args.ethreshold
 	else:
-		size=12
-	if args.tfontsize:
-		fsize=args.tfontsize
+		evthresh="1e-10"
+	if args.number:
+		iters=args.number
 	else:
-		fsize="4"
-if args.gene:
-	if int(args.gene)>0:
-		s= str(int(args.gene)+1)
-else:
-	s=5
-if not args.localGenomeList:
-	if args.api_key:
-		Entrez.api_key = args.api_key
-else:
-	if args.api_key:
-		print('Since FlaGs2 will use Local Data api_key is not necessary, Thanks!')
-		sys.exit()
-core = int(args.cpu) if args.cpu else 1
-if args.cluster:
-	import ete3
-	os.environ['QT_QPA_PLATFORM']='offscreen'
-print("\nStarting FlaGs2 version 1.2.0 \nPlease only run one instance of FlaGs2 at a time to avoid making more queries than NCBI’s limit.")
-print('For more information, please check https://ncbiinsights.ncbi.nlm.nih.gov/2017/11/02/new-api-keys-for-the-e-utilities/ \n')
+		iters="3"
+	if args.tree:
+		if args.tshape:
+			size=args.tshape
+		else:
+			size=12
+		if args.tfontsize:
+			fsize=args.tfontsize
+		else:
+			fsize="4"
+	if args.gene:
+		if int(args.gene)>0:
+			s= str(int(args.gene)+1)
+	else:
+		s=5
+	if not args.localGenomeList:
+		if args.api_key:
+			Entrez.api_key = args.api_key
+	else:
+		if args.api_key:
+			print('Since FlaGs2 will use Local Data api_key is not necessary, Thanks!')
+			sys.exit()
+	core = int(args.cpu) if args.cpu else 1
+	if args.cluster:
+		import ete3
+		os.environ['QT_QPA_PLATFORM']='offscreen'
+	print("\nStarting FlaGs2 version 1.2.0 \nPlease only run one instance of FlaGs2 at a time to avoid making more queries than NCBI’s limit.")
+	print('For more information, please check https://ncbiinsights.ncbi.nlm.nih.gov/2017/11/02/new-api-keys-for-the-e-utilities/ \n')
 
-Entrez.tool = 'FlaGs2'
-ncbi_time= 0.4
-timeout = 10
-socket.setdefaulttimeout(timeout)
-Entrez.email = args.recipients[0]
-Entrez.max_tries = 5
-Entrez.sleep_between_tries = 60
+	Entrez.tool = 'FlaGs2'
+	ncbi_time= 0.4
+	timeout = 10
+	socket.setdefaulttimeout(timeout)
+	Entrez.email = args.recipients[0]
+	Entrez.max_tries = 5
+	Entrez.sleep_between_tries = 60
 
-queryList=[]
+	queryList=[]
 
-if args.localGenomeList: queryList=query_list_builder(args.localGenomeList, False)
-else:
-	if args.proteinList: queryList=query_list_builder(args.proteinList, True)
-	else:queryList=query_list_builder(args.assemblyList, False)
-	print ('\n'+ '>> Cross-checking of the accession list in progress ...'+ '\n')
-q=0
-ne=0
-queryDict={} #protein Id as query and a set of assembly number as value [either All or Species of interest]
-#{'WP_019504790.1#1': {'GCF_000332195.1'}, 'WP_028108719.1#2': {'GCF_000422645.1'}, 'WP_087820443.1#3': {'GCF_900185565.1'}}
-#{'WP_019504790.1#1': 'GCF_000332195.1', 'WP_028108719.1#2': 'GCF_000422645.1', 'WP_087820443.1#3': 'GCF_900185565.1'} local
-if not args.localGenomeList:
-	with open (args.out_prefix+'_NameError.txt', 'w') as fbad:
+	if args.localGenomeList: queryList=query_list_builder(args.localGenomeList, False)
+	else:
+		if args.proteinList: queryList=query_list_builder(args.proteinList, True)
+		else:queryList=query_list_builder(args.assemblyList, False)
+		print ('\n'+ '>> Cross-checking of the accession list in progress ...'+ '\n')
+	q=0
+	ne=0
+	queryDict={} #protein Id as query and a set of assembly number as value [either All or Species of interest]
+	#{'WP_019504790.1#1': {'GCF_000332195.1'}, 'WP_028108719.1#2': {'GCF_000422645.1'}, 'WP_087820443.1#3': {'GCF_900185565.1'}}
+	#{'WP_019504790.1#1': 'GCF_000332195.1', 'WP_028108719.1#2': 'GCF_000422645.1', 'WP_087820443.1#3': 'GCF_900185565.1'} local
+	if not args.localGenomeList:
+		with open (args.out_prefix+'_NameError.txt', 'w') as fbad:
 
-		# Classify queries by type for batching
-		single_indices       = [i for i, qr in enumerate(queryList) if len(qr) < 2]
-		paired_indices       = [i for i, qr in enumerate(queryList) if len(qr) >= 2]
+			# Classify queries by type for batching
+			single_indices       = [i for i, qr in enumerate(queryList) if len(qr) < 2]
+			paired_indices       = [i for i, qr in enumerate(queryList) if len(qr) >= 2]
 
-		wp_single_indices    = [i for i in single_indices
-								if queryList[i][0][:2]=='WP' and queryList[i][0][-2]=='.']
-		xp_single_indices    = [i for i in single_indices
-								if queryList[i][0][:2]=='XP' and queryList[i][0][-2]=='.']
-		other_single_indices = [i for i in single_indices
-								if not (queryList[i][0][:2]=='WP' and queryList[i][0][-2]=='.')
-								and not (queryList[i][0][:2]=='XP' and queryList[i][0][-2]=='.')]
+			wp_single_indices    = [i for i in single_indices
+									if queryList[i][0][:2]=='WP' and queryList[i][0][-2]=='.']
+			xp_single_indices    = [i for i in single_indices
+									if queryList[i][0][:2]=='XP' and queryList[i][0][-2]=='.']
+			other_single_indices = [i for i in single_indices
+									if not (queryList[i][0][:2]=='WP' and queryList[i][0][-2]=='.')
+									and not (queryList[i][0][:2]=='XP' and queryList[i][0][-2]=='.')]
 
-		xp_paired_indices    = [i for i in paired_indices
-								if queryList[i][0][:3]=='XP_' and queryList[i][0][-2]=='.']
-		wp_paired_indices    = [i for i in paired_indices
-								if queryList[i][0][:3]!='XP_' and queryList[i][0][-2]=='.']
+			xp_paired_indices    = [i for i in paired_indices
+									if queryList[i][0][:3]=='XP_' and queryList[i][0][-2]=='.']
+			wp_paired_indices    = [i for i in paired_indices
+									if queryList[i][0][:3]!='XP_' and queryList[i][0][-2]=='.']
 
-		# Batch Entrez fetches 
+			# Batch Entrez fetches 
 
-		wp_single_results = (batch_accession_from_wp([queryList[i][0] for i in wp_single_indices])
-							 if wp_single_indices else {})
+			wp_single_results = (batch_accession_from_wp([queryList[i][0] for i in wp_single_indices])
+								 if wp_single_indices else {})
 
-		xp_single_results = (batch_accession_from_xp([queryList[i][0] for i in xp_single_indices])
-							 if xp_single_indices else {})
-		other_resolved = {}
-		if other_single_indices:
-			with ThreadPoolExecutor(max_workers=min(core, len(other_single_indices))) as ex:
-				future_to_idx = {ex.submit(identicalProtID, queryList[i][0]): i
-								 for i in other_single_indices}
-				for future in as_completed(future_to_idx):
-					other_resolved[future_to_idx[future]] = future.result()
+			xp_single_results = (batch_accession_from_xp([queryList[i][0] for i in xp_single_indices])
+								 if xp_single_indices else {})
+			other_resolved = {}
+			if other_single_indices:
+				with ThreadPoolExecutor(max_workers=min(core, len(other_single_indices))) as ex:
+					future_to_idx = {ex.submit(identicalProtID, queryList[i][0]): i
+									 for i in other_single_indices}
+					for future in as_completed(future_to_idx):
+						other_resolved[future_to_idx[future]] = future.result()
 
-		other_needs_wp = [i for i in other_single_indices
-						  if other_resolved[i] != queryList[i][0]
-						  and other_resolved[i][:-3] != 'XP_']
-		other_needs_xp = [i for i in other_single_indices
-						  if other_resolved[i] != queryList[i][0]
-						  and other_resolved[i][:-3] == 'XP_']
-		other_special  = [i for i in other_single_indices
-						  if other_resolved[i] == queryList[i][0]]
+			other_needs_wp = [i for i in other_single_indices
+							  if other_resolved[i] != queryList[i][0]
+							  and other_resolved[i][:-3] != 'XP_']
+			other_needs_xp = [i for i in other_single_indices
+							  if other_resolved[i] != queryList[i][0]
+							  and other_resolved[i][:-3] == 'XP_']
+			other_special  = [i for i in other_single_indices
+							  if other_resolved[i] == queryList[i][0]]
 
-		other_wp_results = {}
-		if other_needs_wp:
-			other_wp_results = batch_accession_from_wp(
-				list({other_resolved[i] for i in other_needs_wp}))
+			other_wp_results = {}
+			if other_needs_wp:
+				other_wp_results = batch_accession_from_wp(
+					list({other_resolved[i] for i in other_needs_wp}))
 
-		other_xp_results = {}
-		if other_needs_xp:
-			other_xp_results = batch_accession_from_xp(
-				list({other_resolved[i] for i in other_needs_xp}))
+			other_xp_results = {}
+			if other_needs_xp:
+				other_xp_results = batch_accession_from_xp(
+					list({other_resolved[i] for i in other_needs_xp}))
 
-		special_exceptional_wp = {}
-		special_special_out    = {}
-		if other_special:
-			def _resolve_special(i):
-				rid = other_resolved[i]
-				return i, identicalProtID_WP(rid), identicalProtID_WP_Sp(rid)
-			with ThreadPoolExecutor(max_workers=min(core, len(other_special))) as ex:
-				for i, ewp, sout in ex.map(_resolve_special, other_special):
-					special_exceptional_wp[i] = ewp
-					special_special_out[i]    = sout
+			special_exceptional_wp = {}
+			special_special_out    = {}
+			if other_special:
+				def _resolve_special(i):
+					rid = other_resolved[i]
+					return i, identicalProtID_WP(rid), identicalProtID_WP_Sp(rid)
+				with ThreadPoolExecutor(max_workers=min(core, len(other_special))) as ex:
+					for i, ewp, sout in ex.map(_resolve_special, other_special):
+						special_exceptional_wp[i] = ewp
+						special_special_out[i]    = sout
 
-		exceptional_wp_ids = list({v for v in special_exceptional_wp.values() if v[:3]=='WP_'})
-		exceptional_wp_results = (batch_accession_from_wp(exceptional_wp_ids)
-								  if exceptional_wp_ids else {})
+			exceptional_wp_ids = list({v for v in special_exceptional_wp.values() if v[:3]=='WP_'})
+			exceptional_wp_results = (batch_accession_from_wp(exceptional_wp_ids)
+									  if exceptional_wp_ids else {})
 
-		xp_paired_results = (batch_accession_from_xp([queryList[i][0] for i in xp_paired_indices])
-							 if xp_paired_indices else {})
-		wp_paired_results = (batch_accession_from_wp([queryList[i][0] for i in wp_paired_indices])
-							 if wp_paired_indices else {})
+			xp_paired_results = (batch_accession_from_xp([queryList[i][0] for i in xp_paired_indices])
+								 if xp_paired_indices else {})
+			wp_paired_results = (batch_accession_from_wp([queryList[i][0] for i in wp_paired_indices])
+								 if wp_paired_indices else {})
 
-		# --- batch pre-fetch assembly info and bioproject→assembly mappings ---
-		# Collect every assembly accession appearing in WP results so that
-		# _download_assembly never makes individual Entrez lookups later.
-		all_gcf_accs = set()
-		for res in [wp_single_results, other_wp_results, exceptional_wp_results, wp_paired_results]:
-			for v in res.values():
-				if v and v != {'NAI'}:
-					all_gcf_accs.update(v)
-		if all_gcf_accs:
-			batch_fetch_assembly_info(list(all_gcf_accs))
+			# --- batch pre-fetch assembly info and bioproject→assembly mappings ---
+			# Collect every assembly accession appearing in WP results so that
+			# _download_assembly never makes individual Entrez lookups later.
+			all_gcf_accs = set()
+			for res in [wp_single_results, other_wp_results, exceptional_wp_results, wp_paired_results]:
+				for v in res.values():
+					if v and v != {'NAI'}:
+						all_gcf_accs.update(v)
+			if all_gcf_accs:
+				batch_fetch_assembly_info(list(all_gcf_accs))
 
-		# Collect every BioProject ID appearing in XP results so that
-		# fetch_assembly_from_bioproject never makes individual Entrez lookups.
-		all_bioproj_ids = set()
-		for res in [xp_single_results, other_xp_results, xp_paired_results]:
-			for v in res.values():
-				if v and v != {'NAI'}:
-					all_bioproj_ids.update(v)
-		if all_bioproj_ids:
-			batch_fetch_assembly_from_bioproject(list(all_bioproj_ids))
+			# Collect every BioProject ID appearing in XP results so that
+			# fetch_assembly_from_bioproject never makes individual Entrez lookups.
+			all_bioproj_ids = set()
+			for res in [xp_single_results, other_xp_results, xp_paired_results]:
+				for v in res.values():
+					if v and v != {'NAI'}:
+						all_bioproj_ids.update(v)
+			if all_bioproj_ids:
+				batch_fetch_assembly_from_bioproject(list(all_bioproj_ids))
 
-		for idx, query in enumerate(queryList):
-			q+=1
-			accession_from_wp_out=''
-			accession_from_xp_out=''
-			identicalProtID_Out=''
-			accession_from_wp_ID_out=''
-			accession_from_xp_ID_out=''
-			accession_from_wp_IDSame_out=''
-			exceptionalWP_out=''
-			accession_from_wp_exceptional=''
-			special_out = ''
-			assembly_from_identical=''
-			if args.verbose:
-				print('\t Checking Query '+ query[0] +' ....'+ '('+str(q)+'/'+str(len(queryList))+')')
-			if len(query)<2:
-				if query[0][:2]=='WP' and query[0][-2]=='.': 
-					accession_from_wp_out=wp_single_results.get(query[0], False)
-					if accession_from_wp_out:
-						queryDict[query[0]+'#'+str(q)]=sortGCFvsGCA(accession_from_wp_out)
-					else:
-						ne+=1
-						print(query[0], file= fbad)
-				elif query[0][:2]=='XP' and query[0][-2]=='.':
-					accession_from_xp_out=xp_single_results.get(query[0], False)
-					if accession_from_xp_out:
-						assemList=[]
-						for bioprojs in accession_from_xp_out:
-							resolved_assembly = fetch_assembly_from_bioproject(bioprojs)
-							if resolved_assembly:
-								assemList.append(resolved_assembly)
-						if assemList:
-							queryDict[query[0]+'#'+str(q)]=sortGCFvsGCA(set(assemList))
-					else:
-						ne+=1
-						print(query[0], file= fbad)
-				else: 
-					identicalProtID_Out=other_resolved[idx]
-					if identicalProtID_Out!=query[0]: 
-						if identicalProtID_Out[:-3]!='XP_': 
-							accession_from_wp_ID_out=other_wp_results.get(identicalProtID_Out, False)
-							if accession_from_wp_ID_out:
-								asset=set()
-								for elements in accession_from_wp_ID_out:
-									asset.add(elements)
-								if len(asset)>0:
-									queryDict[identicalProtID_Out+'#'+str(q)+'.'+query[0]]=sortGCFvsGCA(asset)
-							else:
-								ne+=1
-								print(query[0], file= fbad)
-						if identicalProtID_Out[:-3]=='XP_': 
-							accession_from_xp_ID_out=other_xp_results.get(identicalProtID_Out, False)
-							if accession_from_xp_ID_out:
-								assemList=[]
-								for bioprojs in accession_from_xp_ID_out:
-									resolved_assembly = fetch_assembly_from_bioproject(bioprojs)
-									if resolved_assembly:
-										assemList.append(resolved_assembly)
-								if assemList:
-									queryDict[identicalProtID_Out+'#'+str(q)+'.'+query[0]]=sortGCFvsGCA(set(assemList))
-							else:
-								ne+=1
-								print(query[0], file= fbad)
-					elif identicalProtID_Out==query[0]: 
-						exceptionalWP_out = special_exceptional_wp[idx]
-						special_out = special_special_out[idx] 
-						if not args.redundant:
-							if special_out!='#':
-								asset=set()
-								asset.add(special_out.split('|')[1])
-								queryDict[query[0]+'#'+str(q)]=asset
-							else:
-								if exceptionalWP_out[:3]=='WP_':
+			for idx, query in enumerate(queryList):
+				q+=1
+				accession_from_wp_out=''
+				accession_from_xp_out=''
+				identicalProtID_Out=''
+				accession_from_wp_ID_out=''
+				accession_from_xp_ID_out=''
+				accession_from_wp_IDSame_out=''
+				exceptionalWP_out=''
+				accession_from_wp_exceptional=''
+				special_out = ''
+				assembly_from_identical=''
+				if args.verbose:
+					print('\t Checking Query '+ query[0] +' ....'+ '('+str(q)+'/'+str(len(queryList))+')')
+				if len(query)<2:
+					if query[0][:2]=='WP' and query[0][-2]=='.': 
+						accession_from_wp_out=wp_single_results.get(query[0], False)
+						if accession_from_wp_out:
+							queryDict[query[0]+'#'+str(q)]=sortGCFvsGCA(accession_from_wp_out)
+						else:
+							ne+=1
+							print(query[0], file= fbad)
+					elif query[0][:2]=='XP' and query[0][-2]=='.':
+						accession_from_xp_out=xp_single_results.get(query[0], False)
+						if accession_from_xp_out:
+							assemList=[]
+							for bioprojs in accession_from_xp_out:
+								resolved_assembly = fetch_assembly_from_bioproject(bioprojs)
+								if resolved_assembly:
+									assemList.append(resolved_assembly)
+							if assemList:
+								queryDict[query[0]+'#'+str(q)]=sortGCFvsGCA(set(assemList))
+						else:
+							ne+=1
+							print(query[0], file= fbad)
+					else: 
+						identicalProtID_Out=other_resolved[idx]
+						if identicalProtID_Out!=query[0]: 
+							if identicalProtID_Out[:-3]!='XP_': 
+								accession_from_wp_ID_out=other_wp_results.get(identicalProtID_Out, False)
+								if accession_from_wp_ID_out:
+									asset=set()
+									for elements in accession_from_wp_ID_out:
+										asset.add(elements)
+									if len(asset)>0:
+										queryDict[identicalProtID_Out+'#'+str(q)+'.'+query[0]]=sortGCFvsGCA(asset)
+								else:
+									ne+=1
+									print(query[0], file= fbad)
+							if identicalProtID_Out[:-3]=='XP_': 
+								accession_from_xp_ID_out=other_xp_results.get(identicalProtID_Out, False)
+								if accession_from_xp_ID_out:
+									assemList=[]
+									for bioprojs in accession_from_xp_ID_out:
+										resolved_assembly = fetch_assembly_from_bioproject(bioprojs)
+										if resolved_assembly:
+											assemList.append(resolved_assembly)
+									if assemList:
+										queryDict[identicalProtID_Out+'#'+str(q)+'.'+query[0]]=sortGCFvsGCA(set(assemList))
+								else:
+									ne+=1
+									print(query[0], file= fbad)
+						elif identicalProtID_Out==query[0]: 
+							exceptionalWP_out = special_exceptional_wp[idx]
+							special_out = special_special_out[idx] 
+							if not args.redundant:
+								if special_out!='#':
+									asset=set()
+									asset.add(special_out.split('|')[1])
+									queryDict[query[0]+'#'+str(q)]=asset
+								else:
+									if exceptionalWP_out[:3]=='WP_':
+										accession_from_wp_exceptional=exceptional_wp_results.get(exceptionalWP_out, False)
+										if accession_from_wp_exceptional:
+											asset=set()
+											for elements in accession_from_wp_exceptional:
+												asset.add(elements)
+											if len(asset)>0:
+												if query[0]!=exceptionalWP_out:
+													queryDict[exceptionalWP_out+'#'+str(q)+'.'+query[0]]=sortGCFvsGCA(asset)
+												else:
+													queryDict[exceptionalWP_out+'#'+str(q)]=sortGCFvsGCA(asset)
+										else:
+											ne+=1
+											print(query[0], file= fbad)
+							if args.redundant:
+								if exceptionalWP_out[1:3]=='P_':
 									accession_from_wp_exceptional=exceptional_wp_results.get(exceptionalWP_out, False)
 									if accession_from_wp_exceptional:
 										asset=set()
@@ -1072,796 +1087,753 @@ if not args.localGenomeList:
 									else:
 										ne+=1
 										print(query[0], file= fbad)
-						if args.redundant:
-							if exceptionalWP_out[1:3]=='P_':
-								accession_from_wp_exceptional=exceptional_wp_results.get(exceptionalWP_out, False)
-								if accession_from_wp_exceptional:
-									asset=set()
-									for elements in accession_from_wp_exceptional:
-										asset.add(elements)
-									if len(asset)>0:
-										if query[0]!=exceptionalWP_out:
-											queryDict[exceptionalWP_out+'#'+str(q)+'.'+query[0]]=sortGCFvsGCA(asset)
-										else:
-											queryDict[exceptionalWP_out+'#'+str(q)]=sortGCFvsGCA(asset)
-								else:
-									ne+=1
-									print(query[0], file= fbad)
-							elif exceptionalWP_out[2]!='_':
-								assembly_from_identical=identicalProtID_redundant(identicalProtID_Out)
-								if assembly_from_identical!='#':
-									asset=set()
-									for elements in assembly_from_identical:
-										asset.add(elements)
-									if len(asset)>0:
-										if query[0]!=exceptionalWP_out:
-											queryDict[exceptionalWP_out+'#'+str(q)+'.'+query[0]]=sortGCFvsGCA(asset)
-										else:
-											queryDict[exceptionalWP_out+'#'+str(q)]=sortGCFvsGCA(asset)
-								else:
-									ne+=1
-									print(query[0], file= fbad)
+								elif exceptionalWP_out[2]!='_':
+									assembly_from_identical=identicalProtID_redundant(identicalProtID_Out)
+									if assembly_from_identical!='#':
+										asset=set()
+										for elements in assembly_from_identical:
+											asset.add(elements)
+										if len(asset)>0:
+											if query[0]!=exceptionalWP_out:
+												queryDict[exceptionalWP_out+'#'+str(q)+'.'+query[0]]=sortGCFvsGCA(asset)
+											else:
+												queryDict[exceptionalWP_out+'#'+str(q)]=sortGCFvsGCA(asset)
+									else:
+										ne+=1
+										print(query[0], file= fbad)
 
-			else:
-				if query[0][:3]=='XP_' and query[0][-2]=='.':
-					asset=set()
-					accession_from_xp_out=xp_paired_results.get(query[0], False)
-					if accession_from_xp_out:
-						for bioprojs in accession_from_xp_out:
-							resolved_assembly = fetch_assembly_from_bioproject(bioprojs)
-							if resolved_assembly and resolved_assembly==query[1]:
-								asset.add(query[1])
+				else:
+					if query[0][:3]=='XP_' and query[0][-2]=='.':
+						asset=set()
+						accession_from_xp_out=xp_paired_results.get(query[0], False)
+						if accession_from_xp_out:
+							for bioprojs in accession_from_xp_out:
+								resolved_assembly = fetch_assembly_from_bioproject(bioprojs)
+								if resolved_assembly and resolved_assembly==query[1]:
+									asset.add(query[1])
+							if len(asset)>0:
+								queryDict[query[0]+'#'+str(q)]=asset
+						else:
+							ne+=1
+							print(query[0], file= fbad)
+					elif query[0][:3]!='XP_' and query[0][-2]=='.':
+						asset=set()
+						accession_from_wp_out=wp_paired_results.get(query[0], False)
+						if accession_from_wp_out:
+							for elements in accession_from_wp_out:
+								if query[1]==elements:
+									asset.add(query[1])
 						if len(asset)>0:
 							queryDict[query[0]+'#'+str(q)]=asset
 					else:
 						ne+=1
 						print(query[0], file= fbad)
-				elif query[0][:3]!='XP_' and query[0][-2]=='.':
-					asset=set()
-					accession_from_wp_out=wp_paired_results.get(query[0], False)
-					if accession_from_wp_out:
-						for elements in accession_from_wp_out:
-							if query[1]==elements:
-								asset.add(query[1])
-					if len(asset)>0:
-						queryDict[query[0]+'#'+str(q)]=asset
-				else:
-					ne+=1
-					print(query[0], file= fbad)
-else:
-	for query in queryList:
-		q+=1
-		queryDict[query[0]+'#'+str(q)]=query[1]
+	else:
+		for query in queryList:
+			q+=1
+			queryDict[query[0]+'#'+str(q)]=query[1]
 
-nai=0
-NqueryDict={} #{'WP_019504790.1#1': ['GCF_000332195.1'], 'WP_028108719.1#2': ['GCF_000422645.1'], 'WP_087820443.1#3': ['GCF_900185565.1']}
-if args.localGenomeList:
-	with open (args.out_prefix+'_Insufficient_Info_In_DB.txt', 'w') as fNai:
-		for query in queryDict:
-			assemblyIdlist=[]
-			if queryDict[query]!={'NAI'}:
-				assemblyId=queryDict[query]
-				faa_gz=localDir+queryDict[query]+'.faa.gz'
-				if os.path.isfile(faa_gz):
-					with gzip.open(localDir+assemblyId+'.faa.gz', 'rb') as faaIn:
-						for line in faaIn:
-							if line.decode('utf-8')[0]=='>':
-								Line=line.decode('utf-8').rstrip()
-								if '>'+query.split('#')[0]==Line.split(' ')[0]:
-									gff_gz=localDir+assemblyId+'.gff.gz'
-									if os.path.isfile(gff_gz):
-										with gzip.open(localDir+assemblyId+'.gff.gz', 'rb') as lgffIn: #Download and read gff.gz
-											cds_c=0
-											name_c=0
-											prot_c=0
-											cset=set()
-											nset=set()
-											pset=set()
-											for line in lgffIn:
-												if line.decode('utf-8')[0]!='#':
-													Line=line.decode('utf-8').rstrip().split('\t')
-													if Line[2]=='CDS':
-														cds_c=1
-														cset.add(cds_c)
-														if Line[8].split(';')[3][:5]=='Name=': #eliminates pseudo gene as they don't have 'Name='
-															name_c=1
-															nset.add(name_c)
-															if Line[8].split(';')[3].split('=')[1]==query.split('#')[0]:
-																assemblyIdlist.append(assemblyId)
-																NqueryDict[query]=list(set(assemblyIdlist))
-																prot_c=1
-																pset.add(prot_c)
+	nai=0
+	NqueryDict={} #{'WP_019504790.1#1': ['GCF_000332195.1'], 'WP_028108719.1#2': ['GCF_000422645.1'], 'WP_087820443.1#3': ['GCF_900185565.1']}
+	if args.localGenomeList:
+		with open (args.out_prefix+'_Insufficient_Info_In_DB.txt', 'w') as fNai:
+			for query in queryDict:
+				assemblyIdlist=[]
+				if queryDict[query]!={'NAI'}:
+					assemblyId=queryDict[query]
+					faa_gz=localDir+queryDict[query]+'.faa.gz'
+					if os.path.isfile(faa_gz):
+						with gzip.open(localDir+assemblyId+'.faa.gz', 'rb') as faaIn:
+							for line in faaIn:
+								if line.decode('utf-8')[0]=='>':
+									Line=line.decode('utf-8').rstrip()
+									if '>'+query.split('#')[0]==Line.split(' ')[0]:
+										gff_gz=localDir+assemblyId+'.gff.gz'
+										if os.path.isfile(gff_gz):
+											with gzip.open(localDir+assemblyId+'.gff.gz', 'rb') as lgffIn: #Download and read gff.gz
+												cds_c=0
+												name_c=0
+												prot_c=0
+												cset=set()
+												nset=set()
+												pset=set()
+												for line in lgffIn:
+													if line.decode('utf-8')[0]!='#':
+														Line=line.decode('utf-8').rstrip().split('\t')
+														if Line[2]=='CDS':
+															cds_c=1
+															cset.add(cds_c)
+															if Line[8].split(';')[3][:5]=='Name=': #eliminates pseudo gene as they don't have 'Name='
+																name_c=1
+																nset.add(name_c)
+																if Line[8].split(';')[3].split('=')[1]==query.split('#')[0]:
+																	assemblyIdlist.append(assemblyId)
+																	NqueryDict[query]=list(set(assemblyIdlist))
+																	prot_c=1
+																	pset.add(prot_c)
+																else:
+																	prot_c=0
+																	pset.add(prot_c)
 															else:
-																prot_c=0
-																pset.add(prot_c)
+																name_c=0
+																nset.add(name_c)
 														else:
-															name_c=0
-															nset.add(name_c)
-													else:
-														cds_c=0
-														cset.add(cds_c)
-											if lcheck(pset)>0:
-												pass
-											elif lcheck(pset)==0:
-												if lcheck(cset)>0 and lcheck(nset)>0:
-													print(query.split('#')[0],' did not match with supplement local GFF File')
-													print(query, file=fNai)
-													nai+=1
-											else:
-												print('Use recommended [NCBI refseq] format of GFF file')
-												break
-									else:
-										print("Error: %s file not found" % gff_gz)
+															cds_c=0
+															cset.add(cds_c)
+												if lcheck(pset)>0:
+													pass
+												elif lcheck(pset)==0:
+													if lcheck(cset)>0 and lcheck(nset)>0:
+														print(query.split('#')[0],' did not match with supplement local GFF File')
+														print(query, file=fNai)
+														nai+=1
+												else:
+													print('Use recommended [NCBI refseq] format of GFF file')
+													break
+										else:
+											print("Error: %s file not found" % gff_gz)
+					else:
+						print("Error: %s file not found" % faa_gz)
 				else:
-					print("Error: %s file not found" % faa_gz)
-			else:
-				print(query, file=fNai)
-				nai+=1
-else:
-	with open (args.out_prefix+'_Insufficient_Info_In_DB.txt', 'w') as fNai:
-		for query in queryDict:
-			if not queryDict[query] or len(queryDict[query])==0 or queryDict[query]=={'NAI'}:
-				print(query, file=fNai)
-				nai+=1
-				continue
-			if args.redundant:
-				redun=0
-				for newRed in (redundantCreate(queryDict[query],args.redundant)):
-					redun+=1
-					NqueryDict[query+'.'+str(redun)]=list(str(newRed).split())
-			else:
-				NqueryDict[query]=random.sample(queryDict[query],1)
-if not args.localGenomeList:
-	print('\n> Downloading Genome Assembly Files from NCBI FTP Server \n')
-
-_print_lock = threading.Lock()
-
-speciesNameFromOnlineDict = {}
-
-if not args.localGenomeList:
-	# Build flat list of (query, item, 1-based-index) jobs
-	jobs = []
-	for query, items in NqueryDict.items():
-		for item in items:
-			jobs.append((query, item))
-
-	# Worker count: respect -c flag, cap at 8 to avoid hammering NCBI
-	max_workers = min(int(args.cpu) if args.cpu else 8, len(jobs), 8)
-
-	completed_count = 0
-	with ThreadPoolExecutor(max_workers=max_workers) as executor:
-		future_to_job = {
-			executor.submit(_download_assembly, query, item, idx + 1, len(jobs)): (query, item)
-			for idx, (query, item) in enumerate(jobs)
-		}
-		for future in as_completed(future_to_job):
-			item_result, species_label, success = future.result()
-			completed_count += 1
-			if species_label is not None:
-				speciesNameFromOnlineDict[item_result] = species_label
-
-newQ = len(NqueryDict)
-
-for query in NqueryDict:
-	for item in NqueryDict[query]:
-		acc_id = query.split('#')[0]
-		if args.localGenomeList:
-			_load_faa(item)
-			entry = _faa_cache[item].get(acc_id)
-			if entry:
-				species = remBadChar(entry[0].split('[')[-1][:-1])
-				speciesNameFromOnlineDict[item] = species + '_' + remBadChar(item) if args.redundant else species
-		else:
-			if item not in speciesNameFromOnlineDict or speciesNameFromOnlineDict[item]=='Nothing':
-				faaFile=item+'.faa.gz'
-				if os.path.isfile(localDir+faaFile):
-					_load_faa(item)
-					entry = _faa_cache[item].get(acc_id)
-					if entry:
-						species = remBadChar(entry[0].split('[')[-1][:-1])
-						speciesNameFromOnlineDict[item] = species + '_' + remBadChar(item) if args.redundant else species
+					print(query, file=fNai)
+					nai+=1
+	else:
+		with open (args.out_prefix+'_Insufficient_Info_In_DB.txt', 'w') as fNai:
+			for query in queryDict:
+				if not queryDict[query] or len(queryDict[query])==0 or queryDict[query]=={'NAI'}:
+					print(query, file=fNai)
+					nai+=1
+					continue
+				if args.redundant:
+					redun=0
+					for newRed in (redundantCreate(queryDict[query],args.redundant)):
+						redun+=1
+						NqueryDict[query+'.'+str(redun)]=list(str(newRed).split())
 				else:
-					speciesNameFromOnlineDict[item]=item+'#not_found'
+					NqueryDict[query]=random.sample(queryDict[query],1)
+	if not args.localGenomeList:
+		print('\n> Downloading Genome Assembly Files from NCBI FTP Server \n')
+
+	_print_lock = threading.Lock()
+
+	speciesNameFromOnlineDict = {}
+
+	if not args.localGenomeList:
+		# Build flat list of (query, item, 1-based-index) jobs
+		jobs = []
+		for query, items in NqueryDict.items():
+			for item in items:
+				jobs.append((query, item))
+
+		# Worker count: respect -c flag, cap at 8 to avoid hammering NCBI
+		max_workers = min(int(args.cpu) if args.cpu else 8, len(jobs), 8)
+
+		completed_count = 0
+		with ThreadPoolExecutor(max_workers=max_workers) as executor:
+			future_to_job = {
+				executor.submit(_download_assembly, query, item, idx + 1, len(jobs)): (query, item)
+				for idx, (query, item) in enumerate(jobs)
+			}
+			for future in as_completed(future_to_job):
+				item_result, species_label, success = future.result()
+				completed_count += 1
+				if species_label is not None:
+					speciesNameFromOnlineDict[item_result] = species_label
+
+	newQ = len(NqueryDict)
+
+	for query in NqueryDict:
+		for item in NqueryDict[query]:
+			acc_id = query.split('#')[0]
+			if args.localGenomeList:
+				_load_faa(item)
+				entry = _faa_cache[item].get(acc_id)
+				if entry:
+					species = remBadChar(entry[0].split('[')[-1][:-1])
+					speciesNameFromOnlineDict[item] = species + '_' + remBadChar(item) if args.redundant else species
+			else:
+				if item not in speciesNameFromOnlineDict or speciesNameFromOnlineDict[item]=='Nothing':
+					faaFile=item+'.faa.gz'
+					if os.path.isfile(localDir+faaFile):
+						_load_faa(item)
+						entry = _faa_cache[item].get(acc_id)
+						if entry:
+							species = remBadChar(entry[0].split('[')[-1][:-1])
+							speciesNameFromOnlineDict[item] = species + '_' + remBadChar(item) if args.redundant else species
+					else:
+						speciesNameFromOnlineDict[item]=item+'#not_found'
 
 
-if args.keep:
-	with open(args.out_prefix+'_speciesInfo.txt','w') as asmOut:
-		for query in NqueryDict:
-			for item in NqueryDict[query]:
-				print(item, query.split('#')[0], speciesNameFromOnlineDict[item], sep='\t', file=asmOut)
-print('\n'+'>> Input file assessment report: ')
-print('\t'+'Discarded protein ids with improper accession : '+str(ne)+'. See "'+args.out_prefix+'_NameError.txt'+'" file for details.')
-print('\t'+'Discarded protein ids lacking proper information in RefSeq DB : '+str(nai)+'. See "'+args.out_prefix+'_Insufficient_Info_In_DB.txt'+'" file for details.')
-print('\t'+'Remaining queries: '+str(newQ))
+	if args.keep:
+		with open(args.out_prefix+'_speciesInfo.txt','w') as asmOut:
+			for query in NqueryDict:
+				for item in NqueryDict[query]:
+					print(item, query.split('#')[0], speciesNameFromOnlineDict[item], sep='\t', file=asmOut)
+	print('\n'+'>> Input file assessment report: ')
+	print('\t'+'Discarded protein ids with improper accession : '+str(ne)+'. See "'+args.out_prefix+'_NameError.txt'+'" file for details.')
+	print('\t'+'Discarded protein ids lacking proper information in RefSeq DB : '+str(nai)+'. See "'+args.out_prefix+'_Insufficient_Info_In_DB.txt'+'" file for details.')
+	print('\t'+'Remaining queries: '+str(newQ))
 
-FoundDict={} #Accession that found in Refseq
-FlankFoundDict={} #Accession that have flanking genes
-accFlankDict={} #{'WP_092250023.1#1': {0: 'WP_092250023.1+', 1: 'WP_092250020.1+', 2: 'WP_092250017.1-', -1: 'tRNA*+', -2: 'WP_092250026.1-'}}
-positionDict={} #Accession as keys:Start and end position as value
-speciesDict={} #SpeciesName stored here
-queryStrand={} #Strand Information for each query
-LengthDict={} #Length of each query
-seqDict={}
-desDict={}
-acc_CGF_Dict={}
-treeFastadict={} #Query as key and sequence in fasta as value
-querySeqDict={} #For Tree Command
+	FoundDict={} #Accession that found in Refseq
+	FlankFoundDict={} #Accession that have flanking genes
+	accFlankDict={} #{'WP_092250023.1#1': {0: 'WP_092250023.1+', 1: 'WP_092250020.1+', 2: 'WP_092250017.1-', -1: 'tRNA*+', -2: 'WP_092250026.1-'}}
+	positionDict={} #Accession as keys:Start and end position as value
+	speciesDict={} #SpeciesName stored here
+	queryStrand={} #Strand Information for each query
+	LengthDict={} #Length of each query
+	seqDict={}
+	desDict={}
+	acc_CGF_Dict={}
+	treeFastadict={} #Query as key and sequence in fasta as value
+	querySeqDict={} #For Tree Command
 
 
-count=0
-for query in NqueryDict:
-	count+=1
-	if args.verbose:
-		print('\n'+'> '+str(count)+' in process out of '+str(newQ)+' ... '+'\n')
-		print('Query Name =', query.split('#')[0], '\n')
-	for item in NqueryDict[query]:
-		a=0
-		LineList=[]
-		geneProt={}
-		geneChrom={}
-		speciesNameFromDB=speciesNameFromOnlineDict[item]
-		gff_gz=localDir+item+'.gff.gz'
-		if os.path.isfile(gff_gz):
+	count=0
+	for query in NqueryDict:
+		count+=1
+		if args.verbose:
+			print('\n'+'> '+str(count)+' in process out of '+str(newQ)+' ... '+'\n')
+			print('Query Name =', query.split('#')[0], '\n')
+		for item in NqueryDict[query]:
+			a=0
 			LineList=[]
-			geneProt={} 
+			geneProt={}
 			geneChrom={}
-			with gzip.open(localDir+item+'.gff.gz', 'rb') as gffIn: #Download and read gff.gz
-				for line in gffIn:
-					if line.decode('utf-8')[0]!='#':
-						Line=line.decode('utf-8').rstrip().split('\t')
-						if Line[2]=='CDS':
-							if Line[8].split(';')[3][:5]=='Name=': #eliminates pseudo gene as they don't have 'Name='
+			speciesNameFromDB=speciesNameFromOnlineDict[item]
+			gff_gz=localDir+item+'.gff.gz'
+			if os.path.isfile(gff_gz):
+				LineList=[]
+				geneProt={} 
+				geneChrom={}
+				with gzip.open(localDir+item+'.gff.gz', 'rb') as gffIn: #Download and read gff.gz
+					for line in gffIn:
+						if line.decode('utf-8')[0]!='#':
+							Line=line.decode('utf-8').rstrip().split('\t')
+							if Line[2]=='CDS':
+								if Line[8].split(';')[3][:5]=='Name=': #eliminates pseudo gene as they don't have 'Name='
+									if query.split('_')[0]=='XP':
+										if 'GeneID:' in Line[8]:
+											geneProt[getGeneId(Line[8])]=Line[8].split(';')[3].split('=')[1]
+											geneChrom[getGeneId(Line[8])]=Line[0]
+									else:
+										geneProt[Line[8].split(';')[1].split('=')[1]]=Line[8].split(';')[3].split('=')[1]
+										geneChrom[Line[8].split(';')[1].split('=')[1]]=Line[0]
+							if Line[2][-4:]=='gene':
+								a+=1
 								if query.split('_')[0]=='XP':
 									if 'GeneID:' in Line[8]:
-										geneProt[getGeneId(Line[8])]=Line[8].split(';')[3].split('=')[1]
-										geneChrom[getGeneId(Line[8])]=Line[0]
+										newGene=str(a)+'\t'+getGeneId_gene(Line[8])+'\t'+ Line[3]+'\t'+Line[4]+'\t'+ Line[6]+ '\t'+ Line[0]
+										LineList.append(newGene.split('\t'))
+										for genDes in Line[8].split(';'):
+											if 'gene_biotype=' in genDes:
+												if getGeneId_gene(Line[8]) not in geneProt:
+													geneProt[getGeneId_gene(Line[8])]=genDes.split('=')[1]+'_'+query.split('#')[1]+'.'+str(random.randint(0,int(s)*2-1))+'*'
 								else:
-									geneProt[Line[8].split(';')[1].split('=')[1]]=Line[8].split(';')[3].split('=')[1]
-									geneChrom[Line[8].split(';')[1].split('=')[1]]=Line[0]
-						if Line[2][-4:]=='gene':
-							a+=1
-							if query.split('_')[0]=='XP':
-								if 'GeneID:' in Line[8]:
-									newGene=str(a)+'\t'+getGeneId_gene(Line[8])+'\t'+ Line[3]+'\t'+Line[4]+'\t'+ Line[6]+ '\t'+ Line[0]
+									newGene=str(a)+'\t'+Line[8].split(';')[0][3:]+'\t'+ Line[3]+'\t'+Line[4]+'\t'+ Line[6]+ '\t'+ Line[0]
 									LineList.append(newGene.split('\t'))
 									for genDes in Line[8].split(';'):
 										if 'gene_biotype=' in genDes:
-											if getGeneId_gene(Line[8]) not in geneProt:
-												geneProt[getGeneId_gene(Line[8])]=genDes.split('=')[1]+'_'+query.split('#')[1]+'.'+str(random.randint(0,int(s)*2-1))+'*'
-							else:
-								newGene=str(a)+'\t'+Line[8].split(';')[0][3:]+'\t'+ Line[3]+'\t'+Line[4]+'\t'+ Line[6]+ '\t'+ Line[0]
-								LineList.append(newGene.split('\t'))
-								for genDes in Line[8].split(';'):
-									if 'gene_biotype=' in genDes:
-										if Line[8].split(';')[0][3:] not in geneProt:
-											geneProt[Line[8].split(';')[0][3:]]=genDes.split('=')[1]+'_'+query.split('#')[1]+'.'+str(random.randint(0,int(s)*2-1))+'*'
-				geneList=[]
-				for genes in geneProt:
-					if geneProt[genes]==query.split('#')[0]:
-						geneList.append(genes)
-				if len(geneList)>0:
-					rangeSet=set()
-					for line in LineList:
-						if geneChrom[geneList[0]]==line[5]:
-							rangeSet.add(int(line[0]))
+											if Line[8].split(';')[0][3:] not in geneProt:
+												geneProt[Line[8].split(';')[0][3:]]=genDes.split('=')[1]+'_'+query.split('#')[1]+'.'+str(random.randint(0,int(s)*2-1))+'*'
+					geneList=[]
 					for genes in geneProt:
-						if genes==geneList[0]:
-							if query.split('#')[0]==geneProt[genes]:
-								for line in LineList:
-									if genes==line[1]:
-										FoundDict[query]='Yes'
-										if args.tree or args.hmmdb:
-											treeFastadict[query]=str(seqFasLocal(item,query))
-											querySeqDict[query+'|'+remBadChar(spLocal(item,query.split('#')[0]))]=str(seqLocal(item,query.split('#')[0]))
-										if speciesNameFromDB!='Nothing' or speciesNameFromDB!='':
-											speciesDict[query]=speciesNameFromDB
-										else:
-											speciesDict[query]=spLocal(item, query.split('#')[0])
-										lineIdx = LineList.index(line)
-										query_num = query.split('#')[1]
-										queryStrand[query]= LineList[lineIdx][4]
-										positionDict[query]= ("\t".join(map(str,LineList[lineIdx][2:-2])))
-										LengthDict[query]= int(LineList[lineIdx][3])-int(LineList[lineIdx][2])+1
-										udsDict={}
-										dsDict={}
-										udsDict[0]= query+'+'
-										lengthCheck=[]
-										for x in range(1,int(s)):
-											if lineIdx-x>=0 and lineIdx-x<len(LineList):
-												if int(LineList[lineIdx-x][0]) in rangeSet:
-													acc_CGF_Dict[query]= LineList[lineIdx-x][-1] +'\t'+ item
-													seqDict[str(geneProt[LineList[lineIdx-x][1]])]=localNone(seqLocal(item, geneProt[LineList[lineIdx-x][1]]))
-													desDict[geneProt[LineList[lineIdx-x][1]]]=desLocal(item, geneProt[LineList[lineIdx-x][1]])
-													positionDict[geneProt[LineList[lineIdx-x][1]]+'#'+query_num]= ("\t".join(map(str,LineList[lineIdx-x][2:-2])))
-													lengthCheck.append(seqFasLenLocal(item,geneProt[LineList[lineIdx-x][1]]+'#'+query_num))
-													LengthDict[geneProt[LineList[lineIdx-x][1]]+'#'+query_num]= int(LineList[lineIdx-x][3])-int(LineList[lineIdx-x][2])+1
-													udsDict[int(ups(LineList[lineIdx][4])[0]+str(x))]= geneProt[LineList[lineIdx-x][1]]+'#'+query_num+\
-														normalize_strand(LineList[lineIdx][4],LineList[lineIdx-x][4])
-										for y in range(1,int(s)):
-											if lineIdx+y<len(LineList):
-												if int(LineList[lineIdx+y][0]) in rangeSet:
-													acc_CGF_Dict[query]= LineList[lineIdx+y][-1] +'\t'+ item
-													seqDict[str(geneProt[LineList[lineIdx+y][1]])]=localNone(seqLocal(item,geneProt[LineList[lineIdx+y][1]]))
-													desDict[geneProt[LineList[lineIdx+y][1]]]=desLocal(item,geneProt[LineList[lineIdx+y][1]])
-													positionDict[geneProt[LineList[lineIdx+y][1]]+'#'+query_num]= ("\t".join(map(str,LineList[lineIdx+y][2:-2])))
-													lengthCheck.append(seqFasLenLocal(item,geneProt[LineList[lineIdx+y][1]]+'#'+query_num))
-													LengthDict[geneProt[LineList[lineIdx+y][1]]+'#'+query_num]= int(LineList[lineIdx+y][3])-int(LineList[lineIdx+y][2])+1
-													dsDict[int(downs(LineList[lineIdx][4])[0]+str(y))]= geneProt[LineList[lineIdx+y][1]]+'#'+query_num+\
-														normalize_strand(LineList[lineIdx][4],LineList[lineIdx+y][4])
-										if lenChecker(lengthCheck)=='keep':
-											udsDict.update(dsDict)
-											accFlankDict[query]=udsDict
-											if query in accFlankDict:
-												if len(accFlankDict[query])>0:
-													FlankFoundDict[query]='Yes'
-													if args.verbose:
-														print('\t', query.split('#')[0], 'Report: Flanking Genes Found', '\n')
+						if geneProt[genes]==query.split('#')[0]:
+							geneList.append(genes)
+					if len(geneList)>0:
+						rangeSet=set()
+						for line in LineList:
+							if geneChrom[geneList[0]]==line[5]:
+								rangeSet.add(int(line[0]))
+						for genes in geneProt:
+							if genes==geneList[0]:
+								if query.split('#')[0]==geneProt[genes]:
+									for line in LineList:
+										if genes==line[1]:
+											FoundDict[query]='Yes'
+											if args.tree or args.hmmdb:
+												treeFastadict[query]=str(seqFasLocal(item,query))
+												querySeqDict[query+'|'+remBadChar(spLocal(item,query.split('#')[0]))]=str(seqLocal(item,query.split('#')[0]))
+											if speciesNameFromDB!='Nothing' or speciesNameFromDB!='':
+												speciesDict[query]=speciesNameFromDB
+											else:
+												speciesDict[query]=spLocal(item, query.split('#')[0])
+											lineIdx = LineList.index(line)
+											query_num = query.split('#')[1]
+											queryStrand[query]= LineList[lineIdx][4]
+											positionDict[query]= ("\t".join(map(str,LineList[lineIdx][2:-2])))
+											LengthDict[query]= int(LineList[lineIdx][3])-int(LineList[lineIdx][2])+1
+											udsDict={}
+											dsDict={}
+											udsDict[0]= query+'+'
+											lengthCheck=[]
+											for x in range(1,int(s)):
+												if lineIdx-x>=0 and lineIdx-x<len(LineList):
+													if int(LineList[lineIdx-x][0]) in rangeSet:
+														acc_CGF_Dict[query]= LineList[lineIdx-x][-1] +'\t'+ item
+														seqDict[str(geneProt[LineList[lineIdx-x][1]])]=localNone(seqLocal(item, geneProt[LineList[lineIdx-x][1]]))
+														desDict[geneProt[LineList[lineIdx-x][1]]]=desLocal(item, geneProt[LineList[lineIdx-x][1]])
+														positionDict[geneProt[LineList[lineIdx-x][1]]+'#'+query_num]= ("\t".join(map(str,LineList[lineIdx-x][2:-2])))
+														lengthCheck.append(seqFasLenLocal(item,geneProt[LineList[lineIdx-x][1]]+'#'+query_num))
+														LengthDict[geneProt[LineList[lineIdx-x][1]]+'#'+query_num]= int(LineList[lineIdx-x][3])-int(LineList[lineIdx-x][2])+1
+														udsDict[int(ups(LineList[lineIdx][4])[0]+str(x))]= geneProt[LineList[lineIdx-x][1]]+'#'+query_num+\
+															normalize_strand(LineList[lineIdx][4],LineList[lineIdx-x][4])
+											for y in range(1,int(s)):
+												if lineIdx+y<len(LineList):
+													if int(LineList[lineIdx+y][0]) in rangeSet:
+														acc_CGF_Dict[query]= LineList[lineIdx+y][-1] +'\t'+ item
+														seqDict[str(geneProt[LineList[lineIdx+y][1]])]=localNone(seqLocal(item,geneProt[LineList[lineIdx+y][1]]))
+														desDict[geneProt[LineList[lineIdx+y][1]]]=desLocal(item,geneProt[LineList[lineIdx+y][1]])
+														positionDict[geneProt[LineList[lineIdx+y][1]]+'#'+query_num]= ("\t".join(map(str,LineList[lineIdx+y][2:-2])))
+														lengthCheck.append(seqFasLenLocal(item,geneProt[LineList[lineIdx+y][1]]+'#'+query_num))
+														LengthDict[geneProt[LineList[lineIdx+y][1]]+'#'+query_num]= int(LineList[lineIdx+y][3])-int(LineList[lineIdx+y][2])+1
+														dsDict[int(downs(LineList[lineIdx][4])[0]+str(y))]= geneProt[LineList[lineIdx+y][1]]+'#'+query_num+\
+															normalize_strand(LineList[lineIdx][4],LineList[lineIdx+y][4])
+											if lenChecker(lengthCheck)=='keep':
+												udsDict.update(dsDict)
+												accFlankDict[query]=udsDict
+												if query in accFlankDict:
+													if len(accFlankDict[query])>0:
+														FlankFoundDict[query]='Yes'
+														if args.verbose:
+															print('\t', query.split('#')[0], 'Report: Flanking Genes Found', '\n')
+													else:
+														FlankFoundDict[query]='No'
+														if args.verbose:
+															print('\t', query.split('#')[0], 'Report: Flanking Genes Not Found', '\n')
 												else:
 													FlankFoundDict[query]='No'
 													if args.verbose:
 														print('\t', query.split('#')[0], 'Report: Flanking Genes Not Found', '\n')
 											else:
-												FlankFoundDict[query]='No'
+												FlankFoundDict[query]='Yes'
 												if args.verbose:
-													print('\t', query.split('#')[0], 'Report: Flanking Genes Not Found', '\n')
-										else:
-											FlankFoundDict[query]='Yes'
+													print('\t', query.split('#')[0], 'Report: Flanking Gene is longer than 5000 amino acid, thus query is discarded', '\n')
+									else:
+										if query not in FoundDict:
+											FlankFoundDict[query]='No'
 											if args.verbose:
-												print('\t', query.split('#')[0], 'Report: Flanking Gene is longer than 5000 amino acid, thus query is discarded', '\n')
-								else:
-									if query not in FoundDict:
-										FlankFoundDict[query]='No'
-										if args.verbose:
-											print('\t', query.split('#')[0], 'Report: Flanking Genes Not Found', '\n')
+												print('\t', query.split('#')[0], 'Report: Flanking Genes Not Found', '\n')
 
-				else:
-					FlankFoundDict[query]='No'
-					FoundDict[query]='No: ProteinID was not found in Genome Assembly'
-					if args.verbose:
-						print('\t', query.split('#')[0], 'Report: Flanking Genes Not Found', '\n')
-		else:
-			FlankFoundDict[query]='No'
-			FoundDict[query]='No: ProteinID was not found in Genome Assembly'
-			if args.verbose:
-				print('\t', query.split('#')[0], 'Report: Flanking Genes Not Found', '\n')
-
-if not args.localGenomeList:
-	if args.keep:
-		pass
-	else:
-		subprocess.Popen("rm GC*_*.gz", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
-allFlankGeneList=[]
-for keys in accFlankDict:
-	for item in accFlankDict[keys]:
-		allFlankGeneList.append(accFlankDict[keys][item].split('#')[0])
-
-
-flankF=0
-with open (args.out_prefix+'_flankgene_Report.log', 'w') as errOut:
-	serial=0
-	print('#Serial','Query','Assembly_Found', 'FlankingGene_Found', sep='\t', file=errOut)
-	for queries in NqueryDict:
-		serial+=1
-		if queries in FoundDict:
-			if queries in FlankFoundDict:
-				if FlankFoundDict[queries]=='Yes':
-					flankF+=1
-				print(str(serial), queries.split('#')[0], FoundDict[queries], FlankFoundDict[queries], sep='\t', file=errOut)
+					else:
+						FlankFoundDict[query]='No'
+						FoundDict[query]='No: ProteinID was not found in Genome Assembly'
+						if args.verbose:
+							print('\t', query.split('#')[0], 'Report: Flanking Genes Not Found', '\n')
 			else:
-				print(str(serial), queries.split('#')[0], FoundDict[queries], 'No', sep='\t', file=errOut)
+				FlankFoundDict[query]='No'
+				FoundDict[query]='No: ProteinID was not found in Genome Assembly'
+				if args.verbose:
+					print('\t', query.split('#')[0], 'Report: Flanking Genes Not Found', '\n')
+
+	if not args.localGenomeList:
+		if args.keep:
+			pass
 		else:
-			print(str(serial), queries.split('#')[0], 'No', 'No', sep='\t', file=errOut)
+			subprocess.Popen("rm GC*_*.gz", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-reportDict={}
-for query in queryList:
-	queryNumList=[]
-	for queryNum in NqueryDict:
-		if query[0] in queryNum:
-			queryNumList.append(queryNum)
-	if len(queryNumList)>0:
-		reportDict[query[0]]=queryNumList
-	else:
-		reportDict[query[0]]=str('no').split()
+	allFlankGeneList=[]
+	for keys in accFlankDict:
+		for item in accFlankDict[keys]:
+			allFlankGeneList.append(accFlankDict[keys][item].split('#')[0])
 
-qcount=0
-discardedGene=0
-with open (args.out_prefix+'_QueryStatus.txt', 'w') as sumOut:
-	print('#Serial', 'Status', sep='\t', file=sumOut)
+
+	flankF=0
+	with open (args.out_prefix+'_flankgene_Report.log', 'w') as errOut:
+		serial=0
+		print('#Serial','Query','Assembly_Found', 'FlankingGene_Found', sep='\t', file=errOut)
+		for queries in NqueryDict:
+			serial+=1
+			if queries in FoundDict:
+				if queries in FlankFoundDict:
+					if FlankFoundDict[queries]=='Yes':
+						flankF+=1
+					print(str(serial), queries.split('#')[0], FoundDict[queries], FlankFoundDict[queries], sep='\t', file=errOut)
+				else:
+					print(str(serial), queries.split('#')[0], FoundDict[queries], 'No', sep='\t', file=errOut)
+			else:
+				print(str(serial), queries.split('#')[0], 'No', 'No', sep='\t', file=errOut)
+
+	reportDict={}
 	for query in queryList:
-		qcount+=1
-		for item in reportDict[query[0]]:
-			if item in FlankFoundDict:
-				if item in accFlankDict:
-					if FlankFoundDict[item]=='Yes':
-						print(str(qcount), reporter(query[0], item.split('#')[0], similarityID(query[0], item.split('#')[0]), ''.join(NqueryDict[item]), 'Yes'), sep='\t', file=sumOut)
+		queryNumList=[]
+		for queryNum in NqueryDict:
+			if query[0] in queryNum:
+				queryNumList.append(queryNum)
+		if len(queryNumList)>0:
+			reportDict[query[0]]=queryNumList
+		else:
+			reportDict[query[0]]=str('no').split()
+
+	qcount=0
+	discardedGene=0
+	with open (args.out_prefix+'_QueryStatus.txt', 'w') as sumOut:
+		print('#Serial', 'Status', sep='\t', file=sumOut)
+		for query in queryList:
+			qcount+=1
+			for item in reportDict[query[0]]:
+				if item in FlankFoundDict:
+					if item in accFlankDict:
+						if FlankFoundDict[item]=='Yes':
+							print(str(qcount), reporter(query[0], item.split('#')[0], similarityID(query[0], item.split('#')[0]), ''.join(NqueryDict[item]), 'Yes'), sep='\t', file=sumOut)
+						else:
+							print(str(qcount), reporter(query[0], item.split('#')[0], similarityID(query[0], item.split('#')[0]), ''.join(NqueryDict[item]), 'No'), sep='\t', file=sumOut)
 					else:
-						print(str(qcount), reporter(query[0], item.split('#')[0], similarityID(query[0], item.split('#')[0]), ''.join(NqueryDict[item]), 'No'), sep='\t', file=sumOut)
+						if FlankFoundDict[item]=='Yes':
+							discardedGene+=1
+							print(str(qcount), query[0]+' is a valid NCBI protein accession but Discarded : Flanking gene with a length more than 5000 amino acid detected.', sep='\t',file=sumOut)
+						else:
+							print(str(qcount), reporter(query[0], item.split('#')[0], similarityID(query[0], item.split('#')[0]), ''.join(NqueryDict[item]), 'No'), sep='\t', file=sumOut)
 				else:
-					if FlankFoundDict[item]=='Yes':
-						discardedGene+=1
-						print(str(qcount), query[0]+' is a valid NCBI protein accession but Discarded : Flanking gene with a length more than 5000 amino acid detected.', sep='\t',file=sumOut)
-					else:
-						print(str(qcount), reporter(query[0], item.split('#')[0], similarityID(query[0], item.split('#')[0]), ''.join(NqueryDict[item]), 'No'), sep='\t', file=sumOut)
-			else:
-				print(str(qcount), reporter(query[0], 'No', 'No', 'No', 'No'), sep='\t', file=sumOut)
+					print(str(qcount), reporter(query[0], 'No', 'No', 'No', 'No'), sep='\t', file=sumOut)
 
-print('\n'+'>> Flanking Genes found : '+str(flankF)+' out of remaining '+str(serial)+'. See "'+args.out_prefix+'_flankgene_Report.log'+'" file for details.'+'\n'+'\n')
+	print('\n'+'>> Flanking Genes found : '+str(flankF)+' out of remaining '+str(serial)+'. See "'+args.out_prefix+'_flankgene_Report.log'+'" file for details.'+'\n'+'\n')
 
-if int(flankF)==0:
-	print('>> No Flanking Genes found, please update your accession list.')
-	sys.exit()
-elif len(accFlankDict)==0:
-	print('>> For every query, flanking gene(s) having a length more than 5000 amino acid detected. Please update your accession list. \n')
-	sys.exit()
-elif int(flankF)==discardedGene:
-	print('>> For every query, flanking gene(s) having a length more than 5000 amino acid detected. Please update your accession list. \n')
-	sys.exit()
-else:
-	pass
+	if int(flankF)==0:
+		print('>> No Flanking Genes found, please update your accession list.')
+		sys.exit()
+	elif len(accFlankDict)==0:
+		print('>> For every query, flanking gene(s) having a length more than 5000 amino acid detected. Please update your accession list. \n')
+		sys.exit()
+	elif int(flankF)==discardedGene:
+		print('>> For every query, flanking gene(s) having a length more than 5000 amino acid detected. Please update your accession list. \n')
+		sys.exit()
+	else:
+		pass
 
 
-if args.tree: #Generate fasta file for making phylogenetic Tree
-	with open(args.out_prefix+'_tree.fasta', 'w') as treeOut:
+	if args.tree: #Generate fasta file for making phylogenetic Tree
+		with open(args.out_prefix+'_tree.fasta', 'w') as treeOut:
+			for queries in NqueryDict:
+				if queries in accFlankDict:
+					if queries in treeFastadict:
+						print(treeFastadict[queries], file=treeOut)
+
+
+	if len(seqDict)!=len(desDict):
+		if len(seqDict)>len(desDict):
+			for seqids in sorted(seqDict):
+				if seqids not in desDict:
+					desDict[seqids]=des_check(str(seq_from_wp(seqids).split('\t')[0]))
+		else:
+			for seqids in sorted(desDict):
+				if seqids not in seqDict:
+					seqDict[seqids]=str(seq_from_wp(seqids).split('\t')[1])
+	else:
+		if args.verbose:
+			print ('Description collected for Flanking Genes!')
+
+	with open(args.out_prefix+'_all.fasta', 'w') as all_fasta:
 		for queries in NqueryDict:
 			if queries in accFlankDict:
 				if queries in treeFastadict:
-					print(treeFastadict[queries], file=treeOut)
-
-
-if len(seqDict)!=len(desDict):
-	if len(seqDict)>len(desDict):
+					print(treeFastadict[queries], file=all_fasta)
 		for seqids in sorted(seqDict):
-			if seqids not in desDict:
-				desDict[seqids]=des_check(str(seq_from_wp(seqids).split('\t')[0]))
-	else:
-		for seqids in sorted(desDict):
-			if seqids not in seqDict:
-				seqDict[seqids]=str(seq_from_wp(seqids).split('\t')[1])
-else:
-	if args.verbose:
-		print ('Description collected for Flanking Genes!')
+			if seqDict[seqids]!='--':
+				print('>'+desDict[seqids]+'\n'+seqDict[seqids], file=all_fasta)
 
-with open(args.out_prefix+'_all.fasta', 'w') as all_fasta:
-	for queries in NqueryDict:
-		if queries in accFlankDict:
-			if queries in treeFastadict:
-				print(treeFastadict[queries], file=all_fasta)
+
+	b=0
+	with open (args.out_prefix+'_flankgene.fasta'+'_cluster_out', 'w') as fastaNew:
+		for seqids in sorted(seqDict):
+			if seqDict[seqids]!='--':
+				b+=1
+				print('>'+seqids+'|'+desDict[seqids]+'\n'+seqDict[seqids], file=fastaNew)
+
+	if args.verbose:
+		print ('Total Flanking genes found = '+ str(b))
+
+	print('\n>> Now running Jackhmmer and clustering flanking genes\n')
+
+	infilename=args.out_prefix+'_flankgene.fasta'+'_cluster_out'
+
+	directory = args.out_prefix+'_flankgene.fasta'+'_cluster_out_individuals'
+	if not os.path.exists(directory):
+		os.makedirs(directory)
+
+	al=infilename+"_"+iters+"_"+evthresh+"_jackhits.tsv"
+	jack_lock = threading.Lock()
+	jack_jobs = [] 
+	_ji = 1
 	for seqids in sorted(seqDict):
 		if seqDict[seqids]!='--':
-			print('>'+desDict[seqids]+'\n'+seqDict[seqids], file=all_fasta)
+			jack_jobs.append((_ji, seqids))
+			_ji += 1
+	b = len(jack_jobs)
 
+	def _run_jackhmmer(job):
+		i, seqids = job
+		i_f = directory+"/"+str(i)+".txt"
+		with open(i_f, "w") as indivfile:
+			indivfile.write(">"+seqids+'\n'+seqDict[seqids])
+		if args.cpu:
+			command="jackhmmer --cpu %s -N %s --incE %s --incdomE %s --tblout %s/tblout%s.txt %s  %s>%s/out%s.txt" %(jack_cpus_per_job, iters, evthresh, evthresh, directory, str(i), i_f, infilename, directory, str(i))
+		else:
+			command="jackhmmer -N %s --incE %s --incdomE %s --tblout %s/tblout%s.txt %s  %s>%s/out%s.txt" %(iters, evthresh, evthresh, directory, str(i), i_f, infilename, directory, str(i))
+		subprocess.run(command, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+		tbl=open(directory+"/tblout"+str(i)+".txt").read()
+		part=tbl.split("----------\n")[1].split("\n#")[0]
+		acclist=[]
+		for line in part.splitlines():
+			lineList=line.split()
+			if len(lineList)>17:
+				if line.split()[17]=="1":
+					acclist.append(line.split('|')[0])
+		if args.verbose:
+			with jack_lock:
+				nonlocal_pct = int(i * 100 / b)
+				if i % max(1, b // 20) == 0 or i == b:
+					print('\t>>> {}% Completed... ({}/{})'.format(nonlocal_pct, i, b))
+		return (i, acclist)
 
-b=0
-with open (args.out_prefix+'_flankgene.fasta'+'_cluster_out', 'w') as fastaNew:
-	for seqids in sorted(seqDict):
-		if seqDict[seqids]!='--':
-			b+=1
-			print('>'+seqids+'|'+desDict[seqids]+'\n'+seqDict[seqids], file=fastaNew)
+	jack_workers_count = min(core, b) if args.cpu else min(os.cpu_count() or 4, b)
+	# Each jackhmmer process gets at least 1 CPU; split evenly when parallelising
+	jack_cpus_per_job = max(1, core // max(1, jack_workers_count)) if args.cpu else 1
+	jack_results = {}
+	with ThreadPoolExecutor(max_workers=jack_workers_count) as jack_executor:
+		jack_futures = {jack_executor.submit(_run_jackhmmer, job): job for job in jack_jobs}
+		for future in as_completed(jack_futures):
+			idx, acclist = future.result()
+			jack_results[idx] = acclist
 
-if args.verbose:
-	print ('Total Flanking genes found = '+ str(b))
+	# Write results in original sequential order
+	with open(al, "w") as outacclists:
+		for idx in sorted(jack_results):
+			outacclists.write(str(idx)+"\t"+str(jack_results[idx])+"\n")
 
-print('\n>> Now running Jackhmmer and clustering flanking genes\n')
+	raw=open(al).read().strip()
 
-infilename=args.out_prefix+'_flankgene.fasta'+'_cluster_out'
+	d={}
+	index=0
+	for line in raw.split("\n"):
+		if line.split("\t")[1]!='[]':
+			index+=1
+			actxt=line.split("\t")[1].replace(",","").replace("[","").replace("]","").replace("'","")
+			actlist=actxt.split(" ")
+			d[index]=(actlist)
 
-directory = args.out_prefix+'_flankgene.fasta'+'_cluster_out_individuals'
-if not os.path.exists(directory):
-	os.makedirs(directory)
+	i=1
+	while i<len(d)+1:
+		list1=d[i]
+		j=i+1
+		while j<len(d)+1:
+			list2=d[j]
+			if set(list1) & (set(list2)):
+				union=list(set(list2) | set(list1))
+				d[j]=union
+				d[i]=[]
+			j=j+1
+		i=i+1
+	trueAccessionCount={}
+	for keys in d:
+		numbers=[]
+		for item in d[keys]:
+			numbers.append(allFlankGeneList.count(item))
+		trueAccessionCount[(';'.join(map(str,d[keys])))]=sum(numbers)
+	odtrue=OrderedDict(sorted(trueAccessionCount.items(), key= lambda item:item[1],reverse=True))
 
-al=infilename+"_"+iters+"_"+evthresh+"_jackhits.tsv"
-jack_lock = threading.Lock()
-jack_jobs = [] 
-_ji = 1
-for seqids in sorted(seqDict):
-	if seqDict[seqids]!='--':
-		jack_jobs.append((_ji, seqids))
-		_ji += 1
-b = len(jack_jobs)
+	familyNumber=0
+	with open(infilename+"_"+iters+"_"+evthresh+"_clusters.tsv","w") as clusOut:
+		for k, v in odtrue.items():
+			if len(k.split(';'))>0 and v>0:
+				familyNumber+=1
+				print(str(familyNumber),str(odtrue[k]),k, sep='\t', file=clusOut)
 
-def _run_jackhmmer(job):
-	i, seqids = job
-	i_f = directory+"/"+str(i)+".txt"
-	with open(i_f, "w") as indivfile:
-		indivfile.write(">"+seqids+'\n'+seqDict[seqids])
-	if args.cpu:
-		command="jackhmmer --cpu %s -N %s --incE %s --incdomE %s --tblout %s/tblout%s.txt %s  %s>%s/out%s.txt" %(jack_cpus_per_job, iters, evthresh, evthresh, directory, str(i), i_f, infilename, directory, str(i))
-	else:
-		command="jackhmmer -N %s --incE %s --incdomE %s --tblout %s/tblout%s.txt %s  %s>%s/out%s.txt" %(iters, evthresh, evthresh, directory, str(i), i_f, infilename, directory, str(i))
-	subprocess.run(command, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-	tbl=open(directory+"/tblout"+str(i)+".txt").read()
-	part=tbl.split("----------\n")[1].split("\n#")[0]
-	acclist=[]
-	for line in part.splitlines():
-		lineList=line.split()
-		if len(lineList)>17:
-			if line.split()[17]=="1":
-				acclist.append(line.split('|')[0])
-	if args.verbose:
-		with jack_lock:
-			nonlocal_pct = int(i * 100 / b)
-			if i % max(1, b // 20) == 0 or i == b:
-				print('\t>>> {}% Completed... ({}/{})'.format(nonlocal_pct, i, b))
-	return (i, acclist)
+	outfile_des=open(infilename+"_"+iters+"_"+evthresh+"_outdesc.txt","w")
+	inf=open(infilename+"_"+iters+"_"+evthresh+"_clusters.tsv","r")
 
-jack_workers_count = min(core, b) if args.cpu else min(os.cpu_count() or 4, b)
-# Each jackhmmer process gets at least 1 CPU; split evenly when parallelising
-jack_cpus_per_job = max(1, core // max(1, jack_workers_count)) if args.cpu else 1
-jack_results = {}
-with ThreadPoolExecutor(max_workers=jack_workers_count) as jack_executor:
-	jack_futures = {jack_executor.submit(_run_jackhmmer, job): job for job in jack_jobs}
-	for future in as_completed(jack_futures):
-		idx, acclist = future.result()
-		jack_results[idx] = acclist
+	acclists=inf.read().splitlines()
+	for line in acclists:
+		acclist=line.split("\t")[2].split(";")
+		familyAssignedValue=line.split("\t")[0]
+		if int(line.split("\t")[1])>1:
+			for acc in acclist:
+				outfile_des.write(familyAssignedValue+'('+str(allFlankGeneList.count(acc))+')'+"\t"+acc+"\t"+desDict[acc]+"\n")
+			outfile_des.write ("\n\n")
 
-# Write results in original sequential order
-with open(al, "w") as outacclists:
-	for idx in sorted(jack_results):
-		outacclists.write(str(idx)+"\t"+str(jack_results[idx])+"\n")
+	outfile_des.close()
 
-raw=open(al).read().strip()
+	familyDict={} # Accession:Assigned family Number from Jackhammer
+	with open(args.out_prefix+'_flankgene.fasta_cluster_out_'+iters+'_'+evthresh+'_clusters.tsv', 'r') as clusterIn:
+		for line in clusterIn:
+			if line[0]!='#':
+				line=line.rstrip().split('\t')
+				if int(line[1])>1:
+					for item in (line[2].split(';')):
+						familyDict[item]=int(line[0])
+				else:
+					familyDict[line[2]]=0
 
-d={}
-index=0
-for line in raw.split("\n"):
-	if line.split("\t")[1]!='[]':
-		index+=1
-		actxt=line.split("\t")[1].replace(",","").replace("[","").replace("]","").replace("'","")
-		actlist=actxt.split(" ")
-		d[index]=(actlist)
+	familynum=[]
+	for acc in familyDict:
+		familynum.append(familyDict[acc])
 
-i=1
-while i<len(d)+1:
-	list1=d[i]
-	j=i+1
-	while j<len(d)+1:
-		list2=d[j]
-		if set(list1) & (set(list2)):
-			union=list(set(list2) | set(list1))
-			d[j]=union
-			d[i]=[]
-		j=j+1
-	i=i+1
-trueAccessionCount={}
-for keys in d:
-	numbers=[]
-	for item in d[keys]:
-		numbers.append(allFlankGeneList.count(item))
-	trueAccessionCount[(';'.join(map(str,d[keys])))]=sum(numbers)
-odtrue=OrderedDict(sorted(trueAccessionCount.items(), key= lambda item:item[1],reverse=True))
-
-familyNumber=0
-with open(infilename+"_"+iters+"_"+evthresh+"_clusters.tsv","w") as clusOut:
-	for k, v in odtrue.items():
-		if len(k.split(';'))>0 and v>0:
-			familyNumber+=1
-			print(str(familyNumber),str(odtrue[k]),k, sep='\t', file=clusOut)
-
-outfile_des=open(infilename+"_"+iters+"_"+evthresh+"_outdesc.txt","w")
-inf=open(infilename+"_"+iters+"_"+evthresh+"_clusters.tsv","r")
-
-acclists=inf.read().splitlines()
-for line in acclists:
-	acclist=line.split("\t")[2].split(";")
-	familyAssignedValue=line.split("\t")[0]
-	if int(line.split("\t")[1])>1:
-		for acc in acclist:
-			outfile_des.write(familyAssignedValue+'('+str(allFlankGeneList.count(acc))+')'+"\t"+acc+"\t"+desDict[acc]+"\n")
-		outfile_des.write ("\n\n")
-
-outfile_des.close()
-
-#domain search using hmmscan with default output file + domain table format - under construction
-if args.hmmdb:
-	print('\n>> Now running hmmscan and searching domains\n')
-	if args.cpu:
-		hmmscan_cmd = "hmmscan -E 1e-10 --cpu %s -o %s_dom.txt --domtblout %s_dom_out.txt %s %s_all.fasta"%(round(core/3), args.out_prefix, args.out_prefix, args.hmmdb, args.out_prefix)
-	else:
-		hmmscan_cmd = "hmmscan -E 1e-10 -o %s_dom.txt --domtblout %s_dom_out.txt %s %s_all.fasta"%(args.out_prefix, args.out_prefix, args.hmmdb, args.out_prefix)
-	subprocess.run(hmmscan_cmd, shell=True)
-	dom_dict={}
-	dom_key=''
-	with open(args.out_prefix+"_dom_out.txt",'r') as dom_dict_infile:
-		for line in dom_dict_infile:
-			if any(e in line for e in seqDict.keys()):
-				dom_dict_line = line.split()
-				if dom_dict_line[3]!=dom_key:
-					dom_key = dom_dict_line[3]
-					dom_key_cut=dom_key.split('|')
-					dom_value = "\t"+"\t"+dom_dict_line[0]+"\t"+dom_dict_line[5]+"\t"+dom_dict_line[6]+"\t"+dom_dict_line[17]+"\t"+dom_dict_line[18]+"\n"
-					dom_dict[dom_key_cut[0]]=dom_value
-
-
-	with open(infilename+"_"+iters+"_"+evthresh+"_outdesc.txt", 'r') as out_desc_in, open(infilename+"_"+iters+"_"+evthresh+"_outdesc_dom.txt", 'w') as out_desc_out:
-		for line in out_desc_in:
-			if any(e in line for e in dom_dict.keys()):
-				split_line = line.split('\t')
-				out_desc_out.write(line)
-				out_desc_out.write(''.join(dom_dict[split_line[1]]))
+	center=int(max(familynum))+1
+	noProt=int(max(familynum))+2
+	noProtP=int(max(familynum))+3
+	noColor=int(max(familynum))+4
+	for ids in LengthDict:
+		if ids.split('#')[0][-1]=='*':
+			if ids.split('#')[0][:2].lower()=='ps':
+				familyDict[ids.split('#')[0]]=noProtP
 			else:
-				out_desc_out.write(line)
-
-familyDict={} # Accession:Assigned family Number from Jackhammer
-with open(args.out_prefix+'_flankgene.fasta_cluster_out_'+iters+'_'+evthresh+'_clusters.tsv', 'r') as clusterIn:
-	for line in clusterIn:
-		if line[0]!='#':
-			line=line.rstrip().split('\t')
-			if int(line[1])>1:
-				for item in (line[2].split(';')):
-					familyDict[item]=int(line[0])
+				familyDict[ids.split('#')[0]]=noProt
+		if ids.split('#')[0] not in familyDict:
+			if ids in NqueryDict:
+				familyDict[ids.split('#')[0]]=center
 			else:
-				familyDict[line[2]]=0
+				familyDict[ids.split('#')[0]]=noColor
 
-familynum=[]
-for acc in familyDict:
-	familynum.append(familyDict[acc])
-
-center=int(max(familynum))+1
-noProt=int(max(familynum))+2
-noProtP=int(max(familynum))+3
-noColor=int(max(familynum))+4
-for ids in LengthDict:
-	if ids.split('#')[0][-1]=='*':
-		if ids.split('#')[0][:2].lower()=='ps':
-			familyDict[ids.split('#')[0]]=noProtP
+	color={}
+	color[noColor]='#ffffff'
+	color[center]='#000000'
+	color[noProt]='#f2f2f2'
+	color[noProtP]='#f2f2f3'
+	colorDict={}  #Assigned family Number from Jackhammer : colorcode
+	for families in set(familynum):
+		if families == 0:
+			colorDict[families]=str('#ffffff')
 		else:
-			familyDict[ids.split('#')[0]]=noProt
-	if ids.split('#')[0] not in familyDict:
-		if ids in NqueryDict:
-			familyDict[ids.split('#')[0]]=center
+			if random_color()!='#ffffff' or random_color()!='#000000' or random_color()!='#f2f2f2' or random_color()!='#f2f2f3' :
+				colorDict[families]=random_color()
+
+	colorDict.update(color)
+
+	maxs=(int(s)-1) # required to calculate border size of postscript output
+	mins=maxs-(maxs*2) # required to calculate border size of postscript output
+
+	if not args.tree_order:
+		write_operon_tsv(args.out_prefix+'_operon.tsv', accFlankDict)
+		draw_operon_pdf(args.out_prefix+'_operon.tsv', args.out_prefix+'_operon.pdf')
+
+	if args.tree:###Tree Command with ETE###
+		tree_file= args.out_prefix+'_tree.fasta'
+		if args.cpu:
+			tree_command="ete3 build -a %s -o %s --nochecks --clearall -w mafft_default-trimal01-none-fasttree_full --rename-dup-seqnames --cpu %s" %(tree_file, tree_file[:-6], core)
 		else:
-			familyDict[ids.split('#')[0]]=noColor
+			tree_command="ete3 build -a %s -o %s --nochecks --clearall -w mafft_default-trimal01-none-fasttree_full --rename-dup-seqnames" %(tree_file, tree_file[:-6])
+		os.system(tree_command)
+		from ete3 import Tree, SeqMotifFace, TreeStyle, add_face_to_node
 
-color={}
-color[noColor]='#ffffff'
-color[center]='#000000'
-color[noProt]='#f2f2f2'
-color[noProtP]='#f2f2f3'
-colorDict={}  #Assigned family Number from Jackhammer : colorcode
-for families in set(familynum):
-	if families == 0:
-		colorDict[families]=str('#ffffff')
-	else:
-		if random_color()!='#ffffff' or random_color()!='#000000' or random_color()!='#f2f2f2' or random_color()!='#f2f2f3' :
-			colorDict[families]=random_color()
+		def normalize_strandView(item):  #Strand view change
+			if item=='+':
+				return '>'
+			else:
+				return '<'
 
-colorDict.update(color)
+		def familyView(item):  #Strand view change
+			if item==0:
+				return ' '
+			elif item==center:
+				return ' '
+			elif item==noProt:
+				return ' '
+			elif item==noProtP:
+				return ' '
+			elif item==noColor:
+				return ' '
+			else:
+				return str(item)
 
-maxs=(int(s)-1) # required to calculate border size of postscript output
-mins=maxs-(maxs*2) # required to calculate border size of postscript output
+		seqMult=((maxs)*2)+1
+		seq = ("XXXXXXXXXXXXX--"*seqMult)
+		startDict={}
+		udList=[]
+		for ud in range (mins, maxs+1, 1):
+			udList.append(ud)
+		sList=[]
+		for sa in range(1, 15*seqMult, 15):
+			sList.append(sa)
+		for ln in range(len(udList)):
+			startDict[udList[ln]]=sList[ln]
 
-if not args.tree_order:
-	write_operon_tsv(args.out_prefix+'_operon.tsv', accFlankDict)
-	draw_operon_pdf(args.out_prefix+'_operon.tsv', args.out_prefix+'_operon.pdf')
-
-if args.tree:###Tree Command with ETE###
-	tree_file= args.out_prefix+'_tree.fasta'
-	if args.cpu:
-		tree_command="ete3 build -a %s -o %s --nochecks --clearall -w mafft_default-trimal01-none-fasttree_full --rename-dup-seqnames --cpu %s" %(tree_file, tree_file[:-6], core)
-	else:
-		tree_command="ete3 build -a %s -o %s --nochecks --clearall -w mafft_default-trimal01-none-fasttree_full --rename-dup-seqnames" %(tree_file, tree_file[:-6])
-	os.system(tree_command)
-	from ete3 import Tree, SeqMotifFace, TreeStyle, add_face_to_node
-
-	def normalize_strandView(item):  #Strand view change
-		if item=='+':
-			return '>'
+		nwTree=''
+		motifDict={}
+		motifDict_2={}
+		if os.path.isfile(args.out_prefix+'_tree/mafft_default-trimal01-none-fasttree_full/'+args.out_prefix+'_tree.fasta.final_tree.nw') == True:
+			with open(args.out_prefix+'_tree/mafft_default-trimal01-none-fasttree_full/'+args.out_prefix+'_tree.fasta.final_tree.nw', 'r') as treeIn:
+				for line in treeIn:
+					nwTree=line
+					for items in line.replace('(','').replace(')', '').replace(';', '').replace(',','\t').split('\t'):
+						item=items.split('|')[0]
+						simple_motifs=[]
+						simple_motifs_2=[]
+						for keys in sorted(startDict):
+							if keys in accFlankDict[item]:
+								simple_motifs_s = [startDict[keys], startDict[keys]+13, normalize_strandView(accFlankDict[item][keys][-1]), None, size, outliner(colorDict[familyDict[accFlankDict[item][keys][:-1].split('#')[0]]]), 'rgradient:'+colorDict[familyDict[accFlankDict[item][keys][:-1].split('#')[0]]], "arial|"+fsize+"|black|"+familyView(familyDict[accFlankDict[item][keys][:-1].split('#')[0]])]
+								simple_motifs.append(simple_motifs_s)
+								simple_motifs_2_s = [startDict[keys], startDict[keys]+13, normalize_strandView(accFlankDict[item][keys][-1]), None, size, outliner(colorDict[familyDict[accFlankDict[item][keys][:-1].split('#')[0]]]),colorDict[familyDict[accFlankDict[item][keys][:-1].split('#')[0]]], "arial|"+fsize+"|black|"]
+								simple_motifs_2.append(simple_motifs_2_s)
+							else:
+								simple_motifs_s = [startDict[keys], startDict[keys]+13, '[]', None, size, '#eeeeee', 'rgradient:'+'#ffffff', "arial|"+fsize+"|black|"]
+								simple_motifs.append(simple_motifs_s)
+								simple_motifs_2_s = [startDict[keys], startDict[keys]+13, '[]', None, size, '#eeeeee', '#ffffff', "arial|"+fsize+"|black|"]
+								simple_motifs_2.append(simple_motifs_2_s)
+						motifDict[items[:items.index(':')]]=simple_motifs
+						motifDict_2[items[:items.index(':')]]=simple_motifs_2
 		else:
-			return '<'
+			print('> ETE3 failed to create tree due to lack of valid protein accesions, at least 2 required !')
+			sys.exit()
 
-	def familyView(item):  #Strand view change
-		if item==0:
-			return ' '
-		elif item==center:
-			return ' '
-		elif item==noProt:
-			return ' '
-		elif item==noProtP:
-			return ' '
-		elif item==noColor:
-			return ' '
-		else:
-			return str(item)
+		def get_example_tree():
+			# Create a random tree and add to each leaf a random set of motifs
+			# from the original set
+			t= Tree(nwTree)
+			for item in nwTree.replace('(','').replace(')', '').replace(';', '').replace(',','\t').split('\t'):
+				seqFace = SeqMotifFace(seq, motifs=motifDict[item[:item.index(':')]], seq_format="-", gap_format="blank")
+				(t & item[:item.index(':')]).add_face(seqFace, 0, "aligned")
+			t.ladderize()
+			return t
 
-	seqMult=((maxs)*2)+1
-	seq = ("XXXXXXXXXXXXX--"*seqMult)
-	startDict={}
-	udList=[]
-	for ud in range (mins, maxs+1, 1):
-		udList.append(ud)
-	sList=[]
-	for sa in range(1, 15*seqMult, 15):
-		sList.append(sa)
-	for ln in range(len(udList)):
-		startDict[udList[ln]]=sList[ln]
+		def get_example_tree_2():
+			# Create a random tree and add to each leaf a random set of motifs
+			# from the original set
+			t= Tree(nwTree)
+			for item in nwTree.replace('(','').replace(')', '').replace(';', '').replace(',','\t').split('\t'):
+				seqFace2 = SeqMotifFace(seq, motifs=motifDict_2[item[:item.index(':')]], seq_format="-", gap_format="blank")
+				(t & item[:item.index(':')]).add_face(seqFace2, 0, "aligned")
+			t.ladderize()
+			return t
 
-	nwTree=''
-	motifDict={}
-	motifDict_2={}
-	if os.path.isfile(args.out_prefix+'_tree/mafft_default-trimal01-none-fasttree_full/'+args.out_prefix+'_tree.fasta.final_tree.nw') == True:
-		with open(args.out_prefix+'_tree/mafft_default-trimal01-none-fasttree_full/'+args.out_prefix+'_tree.fasta.final_tree.nw', 'r') as treeIn:
-			for line in treeIn:
-				nwTree=line
+		if __name__ == '__main__':
+			t = get_example_tree()
+			ts = TreeStyle()
+			ts.tree_width = 300
+			ts.show_branch_support = True
+			if args.tree_order:
+				t.write(outfile=args.out_prefix+'_ladderTree.nw')
+				t.render(args.out_prefix+"_flankgenes_1.svg",tree_style=ts)
+			else:
+				t.render(args.out_prefix+"_flankgenes_1.svg",tree_style=ts)
+
+
+		if __name__ == '__main__':
+			t = get_example_tree_2()
+			ts = TreeStyle()
+			ts.tree_width = 300
+			ts.show_branch_support = True
+			if args.tree_order:
+				t.write(outfile=args.out_prefix+'_ladderTree.nw')
+				t.render(args.out_prefix+"_flankgenes_2.svg", tree_style=ts)
+			else:
+				t.render(args.out_prefix+"_flankgenes_2.svg", tree_style=ts)
+
+	if args.tree and args.tree_order:  # Queries in postscript file will be presented as tree order
+		treeOrderList=[]
+		with open(args.out_prefix+'_ladderTree.nw', 'r') as laddertreeIn:
+			for line in laddertreeIn:
 				for items in line.replace('(','').replace(')', '').replace(';', '').replace(',','\t').split('\t'):
 					item=items.split('|')[0]
-					simple_motifs=[]
-					simple_motifs_2=[]
-					for keys in sorted(startDict):
-						if keys in accFlankDict[item]:
-							simple_motifs_s = [startDict[keys], startDict[keys]+13, normalize_strandView(accFlankDict[item][keys][-1]), None, size, outliner(colorDict[familyDict[accFlankDict[item][keys][:-1].split('#')[0]]]), 'rgradient:'+colorDict[familyDict[accFlankDict[item][keys][:-1].split('#')[0]]], "arial|"+fsize+"|black|"+familyView(familyDict[accFlankDict[item][keys][:-1].split('#')[0]])]
-							simple_motifs.append(simple_motifs_s)
-							simple_motifs_2_s = [startDict[keys], startDict[keys]+13, normalize_strandView(accFlankDict[item][keys][-1]), None, size, outliner(colorDict[familyDict[accFlankDict[item][keys][:-1].split('#')[0]]]),colorDict[familyDict[accFlankDict[item][keys][:-1].split('#')[0]]], "arial|"+fsize+"|black|"]
-							simple_motifs_2.append(simple_motifs_2_s)
-						else:
-							simple_motifs_s = [startDict[keys], startDict[keys]+13, '[]', None, size, '#eeeeee', 'rgradient:'+'#ffffff', "arial|"+fsize+"|black|"]
-							simple_motifs.append(simple_motifs_s)
-							simple_motifs_2_s = [startDict[keys], startDict[keys]+13, '[]', None, size, '#eeeeee', '#ffffff', "arial|"+fsize+"|black|"]
-							simple_motifs_2.append(simple_motifs_2_s)
-					motifDict[items[:items.index(':')]]=simple_motifs
-					motifDict_2[items[:items.index(':')]]=simple_motifs_2
-	else:
-		print('> ETE3 failed to create tree due to lack of valid protein accesions, at least 2 required !')
-		sys.exit()
+					treeOrderList.append(item)
+		write_operon_tsv(args.out_prefix+'_TreeOrder_operon.tsv', treeOrderList)
+		draw_operon_pdf(args.out_prefix+'_TreeOrder_operon.tsv', args.out_prefix+'_TreeOrder_output.pdf')
+	if args.hmmdb:
+		import FlaGs2_domains
 
-	def get_example_tree():
-		# Create a random tree and add to each leaf a random set of motifs
-		# from the original set
-		t= Tree(nwTree)
-		for item in nwTree.replace('(','').replace(')', '').replace(';', '').replace(',','\t').split('\t'):
-			seqFace = SeqMotifFace(seq, motifs=motifDict[item[:item.index(':')]], seq_format="-", gap_format="blank")
-			(t & item[:item.index(':')]).add_face(seqFace, 0, "aligned")
-		t.ladderize()
-		return t
-
-	def get_example_tree_2():
-		# Create a random tree and add to each leaf a random set of motifs
-		# from the original set
-		t= Tree(nwTree)
-		for item in nwTree.replace('(','').replace(')', '').replace(';', '').replace(',','\t').split('\t'):
-			seqFace2 = SeqMotifFace(seq, motifs=motifDict_2[item[:item.index(':')]], seq_format="-", gap_format="blank")
-			(t & item[:item.index(':')]).add_face(seqFace2, 0, "aligned")
-		t.ladderize()
-		return t
-
-	if __name__ == '__main__':
-		t = get_example_tree()
-		ts = TreeStyle()
-		ts.tree_width = 300
-		ts.show_branch_support = True
-		if args.tree_order:
-			t.write(outfile=args.out_prefix+'_ladderTree.nw')
-			t.render(args.out_prefix+"_flankgenes_1.svg",tree_style=ts)
-		else:
-			t.render(args.out_prefix+"_flankgenes_1.svg",tree_style=ts)
-
-
-	if __name__ == '__main__':
-		t = get_example_tree_2()
-		ts = TreeStyle()
-		ts.tree_width = 300
-		ts.show_branch_support = True
-		if args.tree_order:
-			t.write(outfile=args.out_prefix+'_ladderTree.nw')
-			t.render(args.out_prefix+"_flankgenes_2.svg", tree_style=ts)
-		else:
-			t.render(args.out_prefix+"_flankgenes_2.svg", tree_style=ts)
-
-if args.tree and args.tree_order:  # Queries in postscript file will be presented as tree order
-	treeOrderList=[]
-	with open(args.out_prefix+'_ladderTree.nw', 'r') as laddertreeIn:
-		for line in laddertreeIn:
-			for items in line.replace('(','').replace(')', '').replace(';', '').replace(',','\t').split('\t'):
-				item=items.split('|')[0]
-				treeOrderList.append(item)
-	write_operon_tsv(args.out_prefix+'_TreeOrder_operon.tsv', treeOrderList)
-	draw_operon_pdf(args.out_prefix+'_TreeOrder_operon.tsv', args.out_prefix+'_TreeOrder_output.pdf')
-
-print('\n'+'<<< Done >>>')
-print('\nIf you use FlaGs2 in your work, please remember to cite these papers!'+'\n\n- Saha CK, Pires RS, Brolin H, Delannoy M, Atkinson GC. 2020. FlaGs and webFlaGs: discovering novel biology through the analysis of gene neighbourhood conservation. Bioinformatics.'+\
-'\nhttps://doi.org/10.1093/bioinformatics/btaa788'+\
-'\n\n- Jimmy S, Saha CK, Kurata T, Stavropoulos C, Oliveira SRA, Koh A, Cepauskas A, Takada H, Rejman D, Tenson T, Strahl H, Garcia-Pino A, Hauryliuk V, Atkinson GC (2020).\nA widespread toxin-antitoxin system exploiting growth control via alarmone signaling. Proc. Natl. Acad. Sci. U.S.A.'+\
-'\nhttps://doi.org/10.1073/pnas.1916617117\n')
-endtime = time.perf_counter()
-print(f"Executed in: {endtime - starttime:.6f} seconds")
-sys.exit()
+	print('\n'+'<<< Done >>>')
+	print('\nIf you use FlaGs2 in your work, please remember to cite these papers!'+'\n\n- Saha CK, Pires RS, Brolin H, Delannoy M, Atkinson GC. 2020. FlaGs and webFlaGs: discovering novel biology through the analysis of gene neighbourhood conservation. Bioinformatics.'+\
+	'\nhttps://doi.org/10.1093/bioinformatics/btaa788'+\
+	'\n\n- Jimmy S, Saha CK, Kurata T, Stavropoulos C, Oliveira SRA, Koh A, Cepauskas A, Takada H, Rejman D, Tenson T, Strahl H, Garcia-Pino A, Hauryliuk V, Atkinson GC (2020).\nA widespread toxin-antitoxin system exploiting growth control via alarmone signaling. Proc. Natl. Acad. Sci. U.S.A.'+\
+	'\nhttps://doi.org/10.1073/pnas.1916617117\n')
+	endtime = time.perf_counter()
+	print(f"Executed in: {endtime - starttime:.6f} seconds")
+	sys.exit()
