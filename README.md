@@ -7,6 +7,7 @@ Run the shell script 'build.sh' to create a conda environment specifically for F
    
 Version 1.2.1:
 * Interactive second output file (domains)
+
 Version 1.2.0:
 * General optimization and stability improvements
 
