@@ -12,20 +12,8 @@ from FlaGs2 import postscriptSize, random_color, _hls2hex, outliner, parse_argum
 
 args = parse_arguments()
 
-def operonFamily(item):
-    if item==0:
-        return ' '
-    elif item==center:
-        return ' '
-    elif item==noProt:
-        return ' '
-    elif item==noProtP:
-        return ' '
-    elif item==noColor:
-        return ' '
-    else:
-        return item
 newQ=0
+
 #domain search using hmmscan with default output file + domain table format
 def hmmscaner(args):
     print('\n>> Now running hmmscan and searching domains\n')
@@ -50,11 +38,7 @@ def hmmscaner(args):
                 dom_out.write('\t'.join(dict_line))
                 dom_out.write('\n')
 
-
 hmmscaner(args)
-color={}
-colorDict={}
-colorDict_domains={}
 
 # 1. Merging the two traces into one plot
 fig = make_subplots(shared_yaxes = True, shared_xaxes = True)
@@ -67,14 +51,11 @@ with open(args.out_prefix+'_TreeOrder_operon.tsv', newline='') as f:
 
 unique_col0 = len(set(row[0] for row in rows if row))
 
-PX_PER_ROW   = 40         # pixels allocated per operon row
+PX_PER_ROW  = 40
 y_axes = unique_col0 * PX_PER_ROW
-
-# x-width: derive from the actual genomic coordinate span across all genes,
-# then add space for the left tick labels and the right-side legend.
 x_coords = [int(r[5]) for r in rows if len(r) > 6 and r[5].lstrip('-').isdigit()] + [int(r[6]) for r in rows if len(r) > 6 and r[6].lstrip('-').isdigit()]
 coord_span = (max(x_coords) - min(x_coords)) if x_coords else 5000
-SCALE     = 0.15  # genomic coords → pixels (tune if genes appear too squished)
+SCALE     = 0.15  # genomic coords to pixels
 x_axes = int(coord_span * SCALE)
 
 
@@ -88,7 +69,11 @@ yList_domain = []
 y_tick_marks = []
 labels = []
 genes = []
+unique_domain_names = []
 
+color={}
+colorDict={}
+colorDict_domains={}
 
 # 4. Data file input
 main_file = open('example_TreeOrder_operon.tsv','r').read()
@@ -144,27 +129,26 @@ for m in eg1:
                 if gen1_name not in colorDict:
                     colorDict[gen1_name] = random_color()
 
-
-            # 4b. Editing the label for each gene in the legend
-            protein = (str(id1) + ' ' + '(' + ('Start: {}\tEnd: {}'.format(x_gene_start, x_gene_end)) + ')')
-            hover_text = 'ID: ' + id1 +'<br>Start: ' + str(x_gene_start) + '<br>End: ' + str(x_gene_end)
-
-
             # 4c. Drawing the genes as polygons/arrows
             if gene_direction == '-':
                 xList_gene = [x_gene_start+100, x_gene_start, x_gene_start+100, x_gene_end, x_gene_end, x_gene_start+100]
                 yList_gene = [y_level_m-2, y_level_m, y_level_m+2, y_level_m+2, y_level_m-2, y_level_m-2]
-                arrowList.append(fig.add_trace(go.Scatter(x = xList_gene, y = yList_gene, fill="toself", fillcolor='rgba(0,0,0,0)', opacity = 1, line=dict(color = outliner(colorDict[gen1_name])), mode = 'lines+text', name = protein, showlegend = False)))
             else:
                 xList_gene = [x_gene_start, x_gene_start, x_gene_end-100, x_gene_end, x_gene_end-100, x_gene_start]
                 yList_gene = [y_level_m-2, y_level_m+2, y_level_m+2, y_level_m, y_level_m-2, y_level_m-2] 
-                arrowList.append(fig.add_trace(go.Scatter(x = xList_gene, y = yList_gene, fill="toself", fillcolor='rgba(0,0,0,0)', opacity = 1, line=dict(color = outliner(colorDict[gen1_name])), mode = 'lines+text', name = protein, showlegend = False)))
+            arrowList.append(fig.add_trace(go.Scatter(
+                x = xList_gene, 
+                y = yList_gene, 
+                fill="toself", 
+                fillcolor='rgba(0,0,0,0)', 
+                opacity = 1, 
+                line=dict(color = outliner(colorDict[gen1_name])), 
+                mode = 'lines+text', 
+                showlegend = False, 
+                hoverinfo = 'none')))
             
-
-
-
-  
             # 6. Domains file input
+            domain_number_list=[]
             domain_file = open(args.out_prefix+"_domains.tsv", 'r').read()
             eg2 = domain_file.split("\n")
             id1 = str(items1[9])
@@ -175,8 +159,6 @@ for m in eg1:
                     ndoms=len(entries2)
                     y_level_d = y_level_m 
                     for entry2 in entries2:
-                        if entry2 == '':
-                            continue # go to end of loop
                         items2 = entry2.split('\t')
                         x_domain_start = int(items2[3]) + x_gene_start
                         x_domain_end = int(items2[4]) + x_gene_start
@@ -186,35 +168,43 @@ for m in eg1:
 
                         # 6a. Editing the label for each domain in the legend
                         domain = ('     ' + id2 + ' ' + '(' + ('Start: {}\tEnd: {}'.format(x_domain_start, x_domain_end)) + ')')
-                        domain_group = (domain_name)
 
                         # 6b. If a gene has additional information about domains (i.e. same id is found in second file), then these will also be drawn inside the arrow.
                         if id1.startswith(id2):
+                            isfirst = False # check if it is first domain of this kind for legend grouping
+                            if not domain_name in unique_domain_names:
+                                isfirst = True
+                                unique_domain_names.append(domain_name)
                             if domain_name not in colorDict_domains:
                                 colorDict_domains[domain_name] = random_color()
-                            if x_domain_end != x_gene_end and x_domain_start != x_gene_start:
-                                xList_domain = [x_domain_start, x_domain_start, x_domain_end, x_domain_end, x_domain_start]
-                                yList_domain = [y_level_m-2, y_level_m+2, y_level_m+2, y_level_m-2, y_level_m-2]
-                                domainList.append(fig.add_trace(go.Scatter(x=xList_domain, y=yList_domain, fill="toself", hoverinfo = 'none', fillcolor=colorDict_domains[domain_name], line=dict(color=colorDict_domains[domain_name]), opacity = 0.5, mode='lines', name = domain, legendgroup=domain_name,legendgrouptitle_text=domain_group)))        
-                            elif x_domain_end == x_gene_end and gene_direction == '-':
-                                xList_domain = [x_domain_start, x_domain_start, x_domain_end, x_domain_end, x_domain_start]
-                                yList_domain = [y_level_m-2, y_level_m+2, y_level_m+2, y_level_m-2, y_level_m-2]
-                                domainList.append(fig.add_trace(go.Scatter(x=xList_domain, y=yList_domain, fill="toself", hoverinfo = 'none', fillcolor=colorDict_domains[domain_name], line=dict(color=colorDict_domains[domain_name]), opacity = 0.5, mode='lines', name = domain, legendgroup=domain_name,legendgrouptitle_text=domain_group)))
-                            elif x_domain_start == x_gene_start and gene_direction == '-':
-                                xList_domain = [x_domain_start+100, x_domain_start, x_domain_start+100, x_domain_end, x_domain_end, x_domain_start+100]
-                                yList_domain = [y_level_m-2, y_level_m, y_level_m+2, y_level_m+2, y_level_m-2, y_level_m-2]
-                                domainList.append(fig.add_trace(go.Scatter(x=xList_domain, y=yList_domain, fill="toself", hoverinfo = 'none', fillcolor=colorDict_domains[domain_name], line=dict(color=colorDict_domains[domain_name]), opacity = 0.5, mode='lines', name = domain, legendgroup=domain_name,legendgrouptitle_text=domain_group)))
-                            elif x_domain_start == x_gene_start and gene_direction == '+':
-                                xList_domain = [x_domain_start, x_domain_start, x_domain_end, x_domain_end, x_domain_start]
-                                yList_domain = [y_level_m-2, y_level_m+2, y_level_m+2, y_level_m-2, y_level_m-2]
-                                domainList.append(fig.add_trace(go.Scatter(x=xList_domain, y=yList_domain, fill="toself", hoverinfo = 'none', fillcolor=colorDict_domains[domain_name], line=dict(color=colorDict_domains[domain_name]), opacity = 0.5, mode='lines', name = domain, legendgroup=domain_name,legendgrouptitle_text=domain_group)))                                       
-                            elif x_domain_end == x_gene_end and gene_direction == '+':
-                                xList_domain = [x_domain_start, x_domain_start, x_domain_end-100, x_domain_end, x_domain_end-100, x_domain_start]
-                                yList_domain = [y_level_m-2, y_level_m+2, y_level_m+2, y_level_m, y_level_m-2, y_level_m-2]
-                                domainList.append(fig.add_trace(go.Scatter(x=xList_domain, y=yList_domain, fill="toself", hoverinfo = 'none', fillcolor=colorDict_domains[domain_name], line=dict(color=colorDict_domains[domain_name]), opacity = 0.5, mode='lines', name = domain, legendgroup=domain_name,legendgrouptitle_text=domain_group)))                                       
-                            else:
-                                pass
-
+                            domain_number = str(unique_domain_names.index(domain_name))
+                            domain_number_list.append(domain_number)
+                            domain_group = domain_number + '. ' + domain_name
+                            x_domain_mid = (x_domain_start + x_domain_end) / 2
+                            xList_domain = [x_domain_start, x_domain_end, x_domain_end, x_domain_start]
+                            yList_domain = [y_level_m-2, y_level_m+2, y_level_m-2, y_level_m-2]
+                            domainList.append(fig.add_trace(go.Scatter(
+                                x=xList_domain, 
+                                y=yList_domain, 
+                                fill="toself", 
+                                fillcolor=colorDict_domains[domain_name], 
+                                line=dict(color=colorDict_domains[domain_name]), 
+                                opacity = 0.6, 
+                                mode='lines', 
+                                name = domain_group, 
+                                legendgroup=domain_name, 
+                                showlegend=isfirst)))
+            # Label: domain numbers above the containing protein 
+            domainList.append(fig.add_trace(go.Scatter(
+                x=[x_gene_start],
+                y=[y_level_m + 2],
+                mode='text',
+                text=[' '.join(domain_number_list)],
+                textposition='top right',
+                textfont=dict(family='Open Sans', size=12, color='#333333'),
+                hoverinfo='none',
+                showlegend=False,
+                legendgroup=domain_name,)))
 
             # 7. Setting the y labels i.e. the organism name and accession nr etc.
             y_tick_marks += [y_level_m]
@@ -231,7 +221,7 @@ config = {'toImageButtonOptions': {'format': 'svg','filename': 'FlaGs','scale': 
 # 9. Graph layout
 fig.update_xaxes(visible = False)
 fig.update_yaxes(visible = True, showgrid = False, showline = False, autorange = True, automargin = True, showticklabels = True, tickvals = y_tick_marks, ticktext = labels, ticklen = 20, tickmode = 'array', titlefont = dict(family = 'Open Sans', size = 8))
-fig.update_layout(autosize=False, width=x_axes, height=y_axes, margin=dict(b=10, t=10, pad=10), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', showlegend = True)
+fig.update_layout(autosize=False, width=x_axes, height=y_axes, margin=dict(b=10, t=10, pad=10), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', legend=dict(orientation="h",   yanchor="top",  y=0, xanchor="left", x=-0.5), showlegend = True)
 
 fig.show(config=config)
 
