@@ -69,3 +69,6 @@ https://repo.anaconda.com/pkgs/main/osx-64/tornado-6.1-py36h9ed2024_0.tar.bz2
 https://repo.anaconda.com/pkgs/main/osx-64/zstd-1.4.9-h322a384_0.tar.bz2
 https://repo.anaconda.com/pkgs/main/osx-64/pandas-1.1.5-py36hb2f4e1b_0.tar.bz2
 https://repo.anaconda.com/pkgs/main/noarch/pytz-2021.3-pyhd3eb1b0_0.tar.bz2
+https://conda.anaconda.org/conda-forge/noarch/packaging-21.3-pyhd8ed1ab_0.tar.bz2
+https://conda.anaconda.org/conda-forge/noarch/tenacity-8.1.0-pyhd8ed1ab_0.tar.bz2
+https://conda.anaconda.org/conda-forge/noarch/plotly-5.18.0-pyhd8ed1ab_0.conda
