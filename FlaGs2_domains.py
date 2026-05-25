@@ -65,7 +65,7 @@ PX_PER_ROW  = 40
 y_axes = unique_col0 * PX_PER_ROW
 x_coords = [int(r[5]) for r in rows if len(r) > 6 and r[5].lstrip('-').isdigit()] + [int(r[6]) for r in rows if len(r) > 6 and r[6].lstrip('-').isdigit()]
 coord_span = (max(x_coords) - min(x_coords)) if x_coords else 5000
-SCALE     = 0.15  # genomic coords to pixels
+SCALE     = 0.12  # genomic coords to pixels
 x_axes = int(coord_span * SCALE)
 
 
@@ -219,7 +219,7 @@ for m in eg1:
 
             # 7. Setting the y labels i.e. the organism name and accession nr etc.
             y_tick_marks += [y_level_m]
-            labels += [items1[0]]
+            raw = items1[0]; parts = raw.split('_', 3); labels += ['_'.join(parts[:3])]
 
             row1 = row1+1
 
