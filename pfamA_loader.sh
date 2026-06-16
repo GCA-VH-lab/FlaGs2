@@ -9,10 +9,12 @@ echo "Environment Check"
 
 if ! command -v hmmpress &> /dev/null; then
     echo "ERROR: 'hmmpress' could not be found."
-    echo "Please install HMMER before running this script."
-    echo "  - macOS: brew install hmmer"
-    echo "  - Linux (Ubuntu/Debian): sudo apt-get install hmmer"
-    echo "  - Linux (Arch): yay -S hmmer"
+    echo "hmmpress indexes the HMM database so domain scans start faster."
+    echo "It ships with HMMER:"
+    echo "  - conda:                  conda install -c bioconda hmmer"
+    echo "  - macOS:                  brew install hmmer"
+    echo "  - Linux (Ubuntu/Debian):  sudo apt-get install hmmer"
+    echo "  - Linux (Arch):           sudo pacman -S hmmer"
     exit 1
 fi
 
@@ -31,18 +33,19 @@ cd "${PFAM_DIR}"
 
 echo "Downloading Pfam files"
 $DOWNLOAD_CMD "${FTP_URL}/Pfam-A.hmm.gz"
-$DOWNLOAD_CMD "${FTP_URL}/Pfam-A.hmm.dat.gz"
-$DOWNLOAD_CMD "${FTP_URL}/active_site.dat.gz"
+$DOWNLOAD_CMD "${FTP_URL}/Pfam-A.clans.tsv.gz"
 
-echo "Extracting compressed files"
+echo "Extracting the HMM database"
 gunzip -f Pfam-A.hmm.gz
-gunzip -f Pfam-A.hmm.dat.gz
-gunzip -f active_site.dat.gz
 
-echo "Assembling and indexing Pfam-A database for HMMER"
+echo "Indexing Pfam-A database for HMMER (hmmpress)"
 hmmpress -f Pfam-A.hmm
 
 echo "Verification"
-ls -lh Pfam-A.hmm*
+ls -lh Pfam-A.hmm* Pfam-A.clans.tsv.gz
 
 echo "DONE"
+echo
+echo "Use with FlaGs2:"
+echo "  --domains --hmmdb ${PFAM_DIR}/Pfam-A.hmm"
+echo "  --clans ${PFAM_DIR}/Pfam-A.clans.tsv.gz   (optional clan colouring)"

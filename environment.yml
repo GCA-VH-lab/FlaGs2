@@ -1,0 +1,13 @@
+name: FlaGs2
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python>=3.9
+  - pip
+  - biopython>=1.79 
+  - requests>=2.25 
+  - pyhmmer>=0.10
+  - mafft>=7.0 
+  - veryfasttree>=4.0 
