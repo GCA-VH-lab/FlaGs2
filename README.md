@@ -4,11 +4,12 @@ Predicting protein functional association by analysis of conservation of genomic
 Run the shell script 'build.sh' to create a conda environment specifically for FlaGs2, it requieres conda. 
 
 - When the length of Flanking Gene is more than 5000 amino acids Jackhmmer can not process the clustering step and thus raised error for few reported cases. This version of FlaGs checks the length of all the Flanking Genes for each query. When the query is identified with a flanking gene that is longer than 5000 amino acids, it is excluded (but reported in the file with '_QueryStatus.txt' suffix) from the analyses to avoid errors.
-   
+Version 2.0.0:
+* No new features, but completely refactored and faster   
+
 Version 1.2.1:
 * Interactive second output file (domains)
 
 Version 1.2.0:
 * General optimization and stability improvements
 
-Running FlaGs_tkinter_output.py with the .tsv file generated from FlaGs2 as input will create a graphical output as the original version of FlaGs. 
