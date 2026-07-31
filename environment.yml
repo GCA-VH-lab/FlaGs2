@@ -6,8 +6,9 @@ channels:
 dependencies:
   - python>=3.9
   - pip
-  - biopython>=1.79 
-  - requests>=2.25 
-  - pyhmmer>=0.10
-  - mafft>=7.0 
-  - veryfasttree>=4.0 
+  - biopython>=1.79
+  - requests>=2.25
+  - pyhmmer>=0.12,<0.13
+  - mafft>=7.0
+  - veryfasttree>=4.0
+  - pybiolib>=1.1.862
