@@ -102,7 +102,7 @@ is optional. See [All options](#all-options) for the full list and
 | Option | Default | Description |
 |---|---|---|
 | `--use_local DIR` | — | Search a directory of local genomes before going to NCBI. A genome is a `.gff` and `.faa` sharing a basename; `.fna` and RNA FASTAs are picked up if present. Files may be gzipped. Anything not found falls back to NCBI. |
-| `-m`, `--max_assemblies N` | `1` | How many genomes one protein may expand to when it occurs in several. Each genome becomes its own row. Raise to compare strains. |
+| `-m`, `--max_assemblies N` | `1` | How many genomes one protein may expand to when it occurs in several. Each genome becomes its own row. Raise to compare strains. Above `1`, row labels in the figures become `protein\|genome` so the rows stay distinguishable. |
 | `-api`, `--api_key KEY` | — | NCBI API key. Also raises the download rate cap from 5/s to 10/s. |
 | `-tmp`, `--temporary DIR` | `./genomes` | Where downloads are stored. Deleted at the end unless `-k`. |
 | `-k`, `--keep` | off | Keep downloaded genomes instead of deleting them. Useful for reruns — the directory can be fed straight back in via `--use_local`. |
@@ -120,7 +120,8 @@ is optional. See [All options](#all-options) for the full list and
 
 | Option | Default | Description |
 |---|---|---|
-| `-O`, `--output DIR` | `output` | Result directory. Its name is also the prefix on every file inside it, so `-O myrun` produces `myrun/myrun_neighbors.svg`. |
+| `-O`, `--output DIR` | `output` | Result directory. A `_YYYYMMDD_HHMMSS` stamp of the run start is appended so repeated runs do not overwrite each other, and the stamped name is also the prefix on every file inside, so `-O myrun` produces `myrun_20260810_093134/myrun_20260810_093134_neighbors.svg`. |
+| `--no_timestamp` | off | Use `-O` verbatim, without the stamp. Repeated runs then overwrite each other; use it when a pipeline needs a fixed path. |
 | `-vb`, `--verbose` | off | Per-stage progress and a timing breakdown. Worth using on any long run. |
 | `-v`, `--version` | — | Print the version and exit. |
 | `-h`, `--help` | — | Print all options and exit. |
@@ -133,8 +134,8 @@ feature, and completes the rest of the run.
 | Option | Needs | Description |
 |---|---|---|
 | `--tree` | mafft, VeryFastTree | Also build a phylogenetic tree with the neighbourhoods aligned to its leaves (`_tree.svg`, `_tree.nwk`). Does not change the main figure. |
-| `--tree_order` | mafft, VeryFastTree | Order rows in the main figure by tree leaf order. Implies `--tree`. |
-| `--domains` | `--hmmdb` | Scan flanking proteins for domains and write `_domains.svg`. |
+| `--tree_order` | mafft, VeryFastTree | Order rows by tree leaf order, in the main figure and in `_operon.tsv`. Implies `--tree`. |
+| `--domains` | `--hmmdb` | Scan flanking proteins for domains and write `_domains.svg` plus `_domains.tsv`. |
 | `--hmmdb FILE` | — | HMM database for `--domains`, e.g. `pfam_db/Pfam-A.hmm`. Run `pfamA_loader.sh` to fetch it. |
 | `--clans FILE` | — | `Pfam-A.clans.tsv.gz`. Colours domains by clan rather than family, which groups related domains together. |
 | `--tmhmm` | pybiolib, network | Predict transmembrane regions with DeepTMHMM, drawn as double red dotted lines on the domain figure. Uploads your sequences to the BioLib cloud. |
@@ -223,7 +224,9 @@ python3 FlaGs2.py -i input.txt -u you@example.com -O run2 --use_local ./genomes
 
 ## Output files
 
-Every file is prefixed with the output directory's name (`results_...` below).
+Every file is prefixed with the output directory's name, stamp included — a run
+with `-O results` writes `results_20260810_093134/results_20260810_093134_operon.tsv`.
+The tables below drop the stamp and write `results_...` for readability.
 
 **Figures**
 
@@ -239,13 +242,17 @@ Every file is prefixed with the output directory's name (`results_...` below).
 
 | File | Contents |
 |---|---|
-| `results_operon.tsv` | one row per flanking gene: family, strand, offset, coordinates, product |
+| `results_operon.tsv` | one row per flanking gene: query, genome, family, strand, offset, coordinates, length, contig, product |
 | `results_clusters.tsv` | each family and its members |
-| `results_speciesInfo.txt` | organism per query row |
+| `results_outdesc.txt` | families as readable blocks: `family(occurrences)`, accession, product description |
+| `results_domains.tsv` | one row per domain hit: protein, family, domain, clan, coordinates, E-value (`--domains`) |
+| `results_jackhits.tsv` | per-protein jackhmmer inclusion lists — the audit trail behind the families |
+| `results_speciesInfo.txt` | genome and organism per query row |
 | `results_QueryStatus.txt` | which genomes each query resolved to, and whether it produced a row |
 | `results_accessionIssues.txt` | queries that produced nothing, and why |
 | `results_flankgene_Report.log` | each neighbourhood as a compact family chain |
 | `results_secretion.tsv` | Sismis hits and which neighbourhoods they overlap (`--sismis`) |
+| `results_sismis_diagnostics.txt` | per-genome Sismis status: scanned, nothing found, or skipped and why (`--sismis`) |
 
 ### Reading the figure
 
@@ -258,10 +265,15 @@ pseudogenes navy.
 
 ### Reading `results_operon.tsv`
 
-The `query` column holds a **row id** of the form `protein|genome`, because one
-protein appearing in several genomes produces one row per genome. The
-`accession` column is the flanking gene itself. `offset` is the position relative
-to the query: `0` is the query, negative upstream, positive downstream.
+The `query` column is the query protein and `assembly` is the genome it was found
+in. They are separate columns because one protein appearing in several genomes
+produces one row per genome, so the pair — not the protein alone — identifies a
+row. The `accession` column is the flanking gene itself. `offset` is the position
+relative to the query: `0` is the query, negative upstream, positive downstream.
+`contig` is the sequence the gene lies on, which is what Sismis hits are matched
+against.
+
+With `--tree_order`, rows appear in tree leaf order rather than input order.
 
 ---
 

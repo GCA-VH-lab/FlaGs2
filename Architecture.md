@@ -133,7 +133,10 @@ they are orders of magnitude larger than the other tables.
 `NeighborhoodClusterer` runs jackhmmer with every flanking protein as a query
 against all of them, building an adjacency map from the included hits, then takes
 connected components as families. Clustering is symmetric by construction: if A
-hits B, they end up in the same component regardless of direction.
+hits B, they end up in the same component regardless of direction. The adjacency
+map is kept on the clusterer after the run and handed to `ReportWriter`, which
+writes it as `_jackhits.tsv` — the only record of *why* two proteins share a
+family.
 
 `RnaClusterer` mirrors this with nhmmer for RNA genes, falling back to grouping
 by normalised product name when no nucleotide sequence is available.
@@ -152,7 +155,9 @@ estimated, and the font stack is pinned to metrically identical faces (Arial,
 Liberation Sans, Helvetica). A generic `sans-serif` would resolve differently per
 platform and render text at a width the layout never reserved.
 
-`ReportWriter` owns every TSV and text output.
+`ReportWriter` owns every TSV and text output. It takes the leaf order under
+`--tree_order` and re-keys its per-row map, so the tables and the figures agree
+on row order rather than only the figures being sorted.
 
 ---
 
@@ -171,6 +176,29 @@ time, so the `-vb` timing table reports true per-tool cost even though the three
 overlap in wall time. `TOTAL` is measured wall clock, not the sum of stages —
 the stages overlap, so summing them would over-count.
 
+### BioLib submission constraints
+
+Three things in `flags2_features.py` look removable and are not:
+
+- **`_SUBMIT_LOCK` around `load()` + `cli()`.** pybiolib's `attempt_sign_in()` is
+  a check-then-act on a shared singleton, and its `UserState` lock file is
+  created with `fail_fast_on_lock_acquire=True`, so a second concurrent caller
+  gets no retry. Worse, the loser sets `_is_in_memory_only` on the shared object,
+  which makes the winner's `__exit__` skip releasing the lock file — leaving a
+  stale lock that degrades *every later run on that machine*. `warm_up()` burns
+  the one-shot sign-in on the main thread before the pool starts; the lock covers
+  the rest. `job.wait()` stays outside it so the cloud jobs still overlap.
+- **The `chdir` into the scratch directory.** The fasta argument must reach
+  `app.cli()` as a bare relative name. Relative names are mounted at
+  `/query.fasta` and passed through unchanged; an absolute path is mounted under
+  a hashed directory and rewritten *without* its leading slash, so the app
+  receives `hash/query.fasta` and never finds its input. `chdir` is process-wide,
+  which is safe only because it is held inside `_SUBMIT_LOCK` and because
+  `main()` absolutises `args.output` and `args.temporary` before any thread
+  starts — the concurrent sismis task holds paths under both.
+- **SignalP's `--output_dir output`.** The app's own `generate_output.py` reads
+  `output/output.json`. Any other directory name makes the remote step fail.
+
 ---
 
 ## Extending it
@@ -183,4 +211,6 @@ on source anywhere else.
 
 **Adding a per-protein annotation layer.** Follow `flags2_features.py`: return
 `{accession: [(kind, start, end)]}`, add a lazy import and a `_run_*` function in
-`main()`, and register it in the parallel task group.
+`main()`, and register it in the parallel task group. If it goes through BioLib,
+subclass `_BioLibScanner` rather than calling `biolib` directly, so it inherits
+`_SUBMIT_LOCK` and the scratch-directory handling described above.
