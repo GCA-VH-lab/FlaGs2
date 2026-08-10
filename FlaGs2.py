@@ -7,6 +7,7 @@ import sys
 import tempfile
 import threading
 import time
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Optional, Tuple, NamedTuple
 
@@ -470,8 +471,9 @@ class FlankingGene(NamedTuple):
 
 
 class NeighborhoodExtractor: 
-	def __init__(self, flank: int = 4):
+	def __init__(self, flank: int = 4, label_assembly: bool = False):
 		self.flank = flank
+		self.label_assembly = label_assembly
 		self.sequences: Dict[str, str] = {}        # all flanking proteins: accession -> sequence
 		self.query_sequences: Dict[str, str] = {}  # query proteins only: accession -> sequence
 		self.row_sequences: Dict[str, str] = {}    # row id -> query sequence (one leaf per assembly-row)
@@ -502,7 +504,10 @@ class NeighborhoodExtractor:
 		q_acc = genes[idx]["accession"]
 		q_organism = faa.get(q_acc, (None, ""))[1]
 		row_id = "{}|{}".format(query, assembly)
-		self.row_label[row_id] = "{}  {}".format(query, q_organism) if q_organism else query
+		# With -m > 1 a query contributes one row per assembly, so the accession alone
+		# no longer identifies a row in the figures.
+		name = "{}|{}".format(query, assembly) if self.label_assembly else query
+		self.row_label[row_id] = "{}  {}".format(name, q_organism) if q_organism else name
 
 		neighborhood = []
 		for j in range(lo, hi):
@@ -693,6 +698,7 @@ class NeighborhoodClusterer:
 		self.incE = incE
 		self.workers = workers
 		self.alphabet = Alphabet.amino()
+		self.adjacency: Dict[str, set] = {}
 
 	def cluster(self, sequences: Dict[str, str]) -> List[List[str]]:
 		if not sequences:
@@ -715,6 +721,7 @@ class NeighborhoodClusterer:
 		with ThreadPoolExecutor(max_workers=self.workers) as pool:
 			adjacency = dict(pool.map(search_one, digital.items()))
 
+		self.adjacency = adjacency
 		return self._connected_components(adjacency)
 
 	@staticmethod
@@ -746,6 +753,7 @@ class RnaClusterer:
 		self.incE = incE
 		self.workers = workers
 		self.alphabet = Alphabet.dna()
+		self.adjacency: Dict[str, set] = {}
 
 	def cluster(self, sequences: Dict[str, str]) -> List[List[str]]:
 		if not sequences:
@@ -761,6 +769,7 @@ class RnaClusterer:
 
 		with ThreadPoolExecutor(max_workers=self.workers) as pool:
 			adjacency = dict(pool.map(search_one, digital.items()))
+		self.adjacency = adjacency
 		return NeighborhoodClusterer._connected_components(adjacency)
 
 	@staticmethod
@@ -780,36 +789,57 @@ class RnaClusterer:
 
 class ReportWriter: 
 	def __init__(self, neighborhoods, families, species,
-				 queries, protein_to_assemblies, matched):
+				 queries, protein_to_assemblies, matched,
+				 order=None, adjacency=None):
 		self.neighborhoods = neighborhoods
 		self.families = families
 		self.species = species
 		self.queries = queries
 		self.protein_to_assemblies = protein_to_assemblies
 		self.matched = matched
+		self.adjacency = adjacency or {}
 		rna_accessions = {g.accession for g in neighborhoods if g.is_rna}
 		self.fam_of = family_numbers(families, rna_accessions)
 		self.by_query = {}
 		for g in neighborhoods:
 			self.by_query.setdefault(g.query, []).append(g)
+		if order:
+			rank = {row: i for i, row in enumerate(order)}
+			self.by_query = {row: self.by_query[row] for row in
+							 sorted(self.by_query, key=lambda r: rank.get(r, len(rank)))}
+		self.occurrences = Counter(g.accession for g in neighborhoods)
+		self.products = {}
+		for g in neighborhoods:
+			self.products.setdefault(g.accession, g.product)
 
 	def write_all(self, out_path):
 		self.operon_tsv(out_path("_operon.tsv"))
 		self.clusters_tsv(out_path("_clusters.tsv"))
+		self.outdesc_txt(out_path("_outdesc.txt"))
 		self.species_info(out_path("_speciesInfo.txt"))
 		self.query_status(out_path("_QueryStatus.txt"))
 		self.flankgene_report(out_path("_flankgene_Report.log"))
+		if self.adjacency:
+			self.jackhits_tsv(out_path("_jackhits.tsv"))
 		return self.accession_issues(out_path("_accessionIssues.txt"))
+
+	@staticmethod
+	def _split_row(row_id):
+		query, _, assembly = row_id.partition("|")
+		return query, assembly
 
 	def operon_tsv(self, path):
 		with open(path, "w") as out:
-			out.write("#query\tspecies\tfamily\tstrand\toffset\tstart\tend\taccession\tproduct\n")
-			for query in self.by_query:
-				sp = self.species.get(query, "")
-				for g in sorted(self.by_query[query], key=lambda x: x.offset):
-					out.write("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(
-						query, sp, self.fam_of.get(g.accession, "-"), g.strand,
-						g.offset, g.start, g.end, g.accession, g.product))
+			out.write("#query\tassembly\tspecies\tfamily\tstrand\toffset\t"
+					  "start\tend\tlength\tcontig\taccession\tproduct\n")
+			for row_id in self.by_query:
+				query, assembly = self._split_row(row_id)
+				sp = self.species.get(row_id, "")
+				for g in sorted(self.by_query[row_id], key=lambda x: x.offset):
+					out.write("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(
+						query, assembly or "-", sp, self.fam_of.get(g.accession, "-"),
+						g.strand, g.offset, g.start, g.end, g.end - g.start + 1,
+						g.contig or "-", g.accession, g.product))
 
 	def clusters_tsv(self, path):
 		with open(path, "w") as out:
@@ -818,11 +848,33 @@ class ReportWriter:
 				label = self.fam_of.get(fam[0], "-") if len(fam) > 1 else "-"
 				out.write("{}\t{}\t{}\n".format(label, len(fam), ",".join(fam)))
 
+	def outdesc_txt(self, path):
+		with open(path, "w") as out:
+			for fam in self.families:
+				if len(fam) < 2:
+					continue
+				label = self.fam_of.get(fam[0], "-")
+				for acc in sorted(fam, key=lambda a: -self.occurrences.get(a, 0)):
+					out.write("{}({})\t{}\t{}\n".format(
+						label, self.occurrences.get(acc, 0), acc,
+						self.products.get(acc, "")))
+				out.write("\n\n")
+
+	def jackhits_tsv(self, path):
+		with open(path, "w") as out:
+			out.write("#accession\tfamily\tn_hits\thits\n")
+			for acc in sorted(self.adjacency):
+				hits = sorted(self.adjacency[acc])
+				out.write("{}\t{}\t{}\t{}\n".format(
+					acc, self.fam_of.get(acc, "-"), len(hits), ";".join(hits)))
+
 	def species_info(self, path):
 		with open(path, "w") as out:
-			out.write("#query\tspecies\n")
-			for query in sorted(self.species):
-				out.write("{}\t{}\n".format(query, self.species[query]))
+			out.write("#query\tassembly\tspecies\n")
+			for row_id in sorted(self.species):
+				query, assembly = self._split_row(row_id)
+				out.write("{}\t{}\t{}\n".format(query, assembly or "-",
+											    self.species[row_id]))
 
 	def query_status(self, path):
 		with open(path, "w") as out:
@@ -869,7 +921,8 @@ def main():
 	parser.add_argument("-ts", "--tshape", type=int, default=20, help=" Size of the flanking-gene triangles in the tree view. Default = 20 ")
 	parser.add_argument("-tf", "--tfontsize", type=int, default=13, help=" Font size inside the tree-view triangles. Default = 13 ")
 	parser.add_argument("-tmp", "--temporary", default="./genomes", help=" Temporary directory for downloaded assemblies; deleted at the end. Default = ./genomes ")
-	parser.add_argument("-O", "--output", default="output", help=" Directory for result files; its name is also the file prefix. Default = output ")
+	parser.add_argument("-O", "--output", default="output", help=" Directory for result files; its name is also the file prefix. A YYYYMMDD_HHMMSS stamp of the run start is appended, so repeated runs do not overwrite each other. Default = output ")
+	parser.add_argument("--no_timestamp", action="store_true", help=" Use -O/--output verbatim instead of appending a date-time stamp. Repeated runs then overwrite each other; useful for scripted pipelines that need a fixed path. ")
 	parser.add_argument("--tree", action="store_true", help=" Also build a phylogenetic tree with aligned neighbourhood triangles (<dir>_tree.svg). Does not affect the neighbours output. ")
 	parser.add_argument("-to", "--tree_order", action="store_true", help=" Order the neighbours output by tree leaf order (implies --tree). ")
 	parser.add_argument("--domains", action="store_true", help=" Scan flanking proteins for domains and write <dir>_domains.svg (requires --hmmdb). ")
@@ -893,6 +946,13 @@ def main():
 		sys.exit("Error: --hmmdb file not found: {}".format(args.hmmdb))
 	if args.clans and not os.path.isfile(args.clans):
 		sys.exit("Error: --clans file not found: {}".format(args.clans))
+
+	if not args.no_timestamp:
+		args.output = "{}_{}".format(os.path.normpath(args.output),
+									 time.strftime("%Y%m%d_%H%M%S"))
+
+	args.output = os.path.abspath(args.output)
+	args.temporary = os.path.abspath(args.temporary)
 
 	timings = {}
 	t_start = time.perf_counter()
@@ -992,7 +1052,8 @@ def main():
 			for key, msg in list(failures.items())[:5]:
 				print("     {}: {}".format(key.rsplit("/", 1)[-1] or key, msg), flush=True)
 
-	extractor = NeighborhoodExtractor(flank=args.gene)
+	extractor = NeighborhoodExtractor(flank=args.gene,
+									  label_assembly=args.max_assemblies > 1)
 	all_neighborhoods = []
 	matched = set()  
 	for protein, asms in protein_to_assemblies.items():
@@ -1093,6 +1154,9 @@ def main():
 		if args.verbose:
 			print(">> running {} in the background (cloud/subprocess, not local CPU)...".format(
 				", ".join(active)), flush=True)
+		if args.tmhmm or args.signalp:
+			import flags2_features as feat_mod
+			feat_mod.warm_up()
 		task = {"sismis": _run_sismis, "tmhmm": _run_tmhmm, "signalp": _run_signalp}
 		with ThreadPoolExecutor(max_workers=3) as pool:
 			futures = {pool.submit(task[name]): name for name in active}
@@ -1207,6 +1271,7 @@ def main():
 		tree_written = True
 	timings["7_visualize"] = time.perf_counter() - t0; t0 = time.perf_counter()
 	domains_written = False
+	domain_table_written = False
 
 	want_domain_fig = args.domains or features
 	if want_domain_fig:
@@ -1225,6 +1290,15 @@ def main():
 				clan_map = dom_mod.DomainScanner.load_clans(args.clans) if args.clans else None
 			except Exception as e:
 				print("Warning: could not read the HMM database, drawing the figure without domains ({}).".format(e))
+		if domains:
+			try:
+				dom_mod.DomainScanner.write_report(
+					domains, out_path("_domains.tsv"), clans=clan_map,
+					families=family_numbers(families,
+											{g.accession for g in all_neighborhoods if g.is_rna}))
+				domain_table_written = True
+			except Exception as e:
+				print("Warning: could not write the domain table ({}).".format(e))
 		try:
 			dom_viz = OperonView(mode="domains")
 			with open(out_path("_domains.svg"), "w") as out:
@@ -1255,8 +1329,12 @@ def main():
 			print("Warning: could not write the secretion figure ({}).".format(e))
 		timings["9_sismis_report"] = time.perf_counter() - t0
 
+	adjacency = dict(clusterer.adjacency)
+	if args.cluster_rna:
+		adjacency.update(rna.adjacency)
 	reporter = ReportWriter(all_neighborhoods, families, extractor.species,
-							all_queries, protein_to_assemblies, matched)
+							all_queries, protein_to_assemblies, matched,
+							order=order, adjacency=adjacency)
 	n_issues = reporter.write_all(out_path)
 	if args.verbose:
 		print(">> wrote data tables and reports ({} queries with issues)".format(n_issues),
@@ -1265,7 +1343,9 @@ def main():
 	print("\n{} -> {}".format(
 		plural(len(extractor.sequences), "flanking protein"),
 		plural(len(families) - len(rna_families), "family", "families")))
-	print("\noutputs in {}/".format(args.output))
+	print("\noutputs in {}/".format(os.path.relpath(args.output)
+									if args.output.startswith(os.getcwd() + os.sep)
+									else args.output))
 	print("  {}_neighbors.svg".format(prefix))
 	if tree_written:
 		print("  {}_tree.svg / {}_tree.nwk".format(prefix, prefix))
@@ -1273,12 +1353,15 @@ def main():
 		print("  (tree skipped: fewer than 3 query sequences)")
 	if domains_written:
 		print("  {}_domains.svg".format(prefix))
+	if domain_table_written:
+		print("  {}_domains.tsv".format(prefix))
 	if secretion_written:
 		print("  {}_secretion.svg".format(prefix))
 	if args.sismis and sismis_mod:
 		print("  {}_secretion.tsv / {}_sismis_diagnostics.txt".format(prefix, prefix))
-	for suffix in ("_operon.tsv", "_clusters.tsv", "_speciesInfo.txt",
-				   "_QueryStatus.txt", "_flankgene_Report.log", "_accessionIssues.txt"):
+	for suffix in ("_operon.tsv", "_clusters.tsv", "_outdesc.txt", "_speciesInfo.txt",
+				   "_QueryStatus.txt", "_flankgene_Report.log", "_jackhits.tsv",
+				   "_accessionIssues.txt"):
 		print("  {}{}".format(prefix, suffix))
 
 	if args.verbose:

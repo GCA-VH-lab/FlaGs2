@@ -388,8 +388,6 @@ class OperonView(_FlaGsBase):
 			x_s, x_e = res_to_x(start), res_to_x(end)
 			lo, hi = (x_e, x_s) if x_e < x_s else (x_s, x_e)
 			if kind == "tm":
-				# horizontal red hatch across the membrane segment, split by a
-				# vertical white line down the middle
 				top, bot = cy - h / 2, cy + h / 2
 				n = 4                                   # number of hatch lines
 				for k in range(1, n + 1):

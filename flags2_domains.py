@@ -1,4 +1,3 @@
-
 import gzip
 from typing import Dict, List, NamedTuple
 
@@ -52,6 +51,20 @@ class DomainScanner:
 	@staticmethod
 	def _decode(value) -> str:
 		return value.decode() if isinstance(value, (bytes, bytearray)) else value
+
+	@staticmethod
+	def write_report(hits: Dict[str, List[DomainHit]], path: str,
+					 clans: Dict[str, str] = None,
+					 families: Dict[str, str] = None):
+		clans = clans or {}
+		families = families or {}
+		with open(path, "w") as out:
+			out.write("#protein\tfamily\tdomain\tclan\tstart\tend\tevalue\n")
+			for protein in sorted(hits):
+				for d in sorted(hits[protein], key=lambda x: x.start):
+					out.write("{}\t{}\t{}\t{}\t{}\t{}\t{:.2e}\n".format(
+						protein, families.get(protein, "-"), d.name,
+						clans.get(d.name, "-"), d.start, d.end, d.evalue))
 
 	@staticmethod
 	def load_clans(path: str) -> Dict[str, str]:

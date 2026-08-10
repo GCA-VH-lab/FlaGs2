@@ -1,9 +1,33 @@
 import os
 import re
 import tempfile
+import threading
 from typing import Dict, List, Tuple
 
 FeatureRegion = Tuple[str, int, int]
+
+_SUBMIT_LOCK = threading.Lock()
+_WARMUP_LOCK = threading.Lock()
+_warmed_up = False
+
+
+def warm_up() -> bool:
+
+	global _warmed_up
+	with _WARMUP_LOCK:
+		if _warmed_up:
+			return True
+		try:
+			import biolib  
+			from biolib.biolib_api_client import BiolibApiClient
+		except ImportError:
+			return False
+		try:
+			BiolibApiClient.get()
+		except Exception:
+			pass   
+		_warmed_up = True
+		return True
 
 
 def _runs(topology: str, wanted: str, kind: str) -> List[FeatureRegion]:
@@ -83,20 +107,21 @@ class _BioLibScanner:
 			 args_template: str = "--fasta {fasta}") -> str:
 		tmp = tempfile.mkdtemp(prefix="flags2_biolib_")
 		fasta_name = "query.fasta"
-		fasta = os.path.join(tmp, fasta_name)
-		self._write_fasta(sequences, fasta)
+		self._write_fasta(sequences, os.path.join(tmp, fasta_name))
+		with _SUBMIT_LOCK:
+			prev_cwd = os.getcwd()
+			os.chdir(tmp)
+			try:
+				app = self._biolib.load(app_slug)
+				job = app.cli(args=args_template.format(fasta=fasta_name))
+			finally:
+				os.chdir(prev_cwd)
+		if hasattr(job, "wait"):
+			job.wait()  
 
-		app = self._biolib.load(app_slug)
-		prev_cwd = os.getcwd()
-		os.chdir(tmp)
-		try:
-			job = app.cli(args=args_template.format(fasta=fasta_name))
-			if hasattr(job, "wait"):
-				job.wait()
-		finally:
-			os.chdir(prev_cwd)
 		out_dir = os.path.join(tmp, "out")
 		saved = []
+		problems = []
 		try:
 			job.save_files(out_dir)
 			for root, _, names in os.walk(out_dir):
@@ -106,8 +131,8 @@ class _BioLibScanner:
 					if full.replace("\\", "/").endswith(result_suffix):
 						with open(full) as fh:
 							return fh.read()
-		except Exception:
-			pass
+		except Exception as e:
+			problems.append("save_files: {!r}".format(e))
 		try:
 			listed = job.list_output_files()
 			paths = [f if isinstance(f, str) else getattr(f, "path", str(f)) for f in listed]
@@ -118,16 +143,18 @@ class _BioLibScanner:
 						else out_file.get_file_handle().read())
 				return data.decode() if isinstance(data, bytes) else data
 			saved = saved or paths
-		except Exception:
-			pass
+		except Exception as e:
+			problems.append("list_output_files: {!r}".format(e))
 		stdout = ""
 		try:
 			stdout = job.get_stdout().decode(errors="replace")[-500:]
-		except Exception:
-			pass
+		except Exception as e:
+			problems.append("get_stdout: {!r}".format(e))
 		raise FileNotFoundError(
-			"{} produced no {}.\n  files seen: {}\n  stdout tail: {}".format(
-				app_slug, result_suffix, saved or "(none)", stdout or "(none)"))
+			"{} produced no {}.\n  files seen: {}\n  retrieval errors: {}\n"
+			"  stdout tail: {}".format(
+				app_slug, result_suffix, saved or "(none)",
+				"; ".join(problems) or "(none)", stdout or "(none)"))
 
 
 class TMScanner(_BioLibScanner):
