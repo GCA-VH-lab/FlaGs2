@@ -23,7 +23,7 @@ genome id → GenomeFiles(gff, faa, rna, genome)
     ↓  NeighborhoodClusterer / RnaClusterer
 families: [[accession, ...], ...]
     ↓  OperonView / NeighborhoodVisualizer / ReportWriter
-SVG figures + TSV tables
+SVG figures + TSV tables + FASTA sequences
 ```
 
 Optional stages (`--tmhmm`, `--signalp`, `--sismis`) hang off the side after
@@ -37,7 +37,7 @@ extraction and feed extra layers into the figures.
 |---|---|---|
 | `FlaGs2.py` | data pipeline and CLI | always |
 | `flags2_view.py` | shared styling, `OperonView` renderer | always |
-| `flags2_tree.py` | MAFFT + VeryFastTree, tree figure | on `--tree` |
+| `flags2_tree.py` | MAFFT + trimming + VeryFastTree or IQ-TREE, tree figure | on `--tree`/`--iqtree` |
 | `flags2_domains.py` | pyhmmer domain scan | on `--domains` |
 | `flags2_features.py` | DeepTMHMM / SignalP via BioLib | on `--tmhmm`/`--signalp` |
 | `flags2_secretion.py` | Sismis secretion-system scan | on `--sismis` |
@@ -77,7 +77,12 @@ matching `MGYG\d+` is routed to MGnify instead.
 
 **`ProteinAssemblyMapper`** turns bare protein accessions into genome ids via
 NCBI's IPG database in one batched request. `XP_` proteins are not in IPG, so
-they take a separate BioProject → assembly path.
+they take a separate BioProject → assembly path. Under `--no_cross_db` it drops
+assemblies from the other database (RefSeq protein → `GCF_`, INSDC protein →
+`GCA_`) before truncating to `-m`. Filtering happens after the fetch rather than
+in the query, which leaves the IPG round trip unchanged and lets
+`dropped_cross_db` record what was excluded for the `-vb` summary. Assemblies
+supplied in the input file bypass the mapper entirely and are never filtered.
 
 **`_GenomeDownloader`** holds everything the two remote sources share: HTTP
 session, retry policy, worker pool, rate limiter, per-file streaming. Subclasses
@@ -138,8 +143,43 @@ map is kept on the clusterer after the run and handed to `ReportWriter`, which
 writes it as `_jackhits.tsv` — the only record of *why* two proteins share a
 family.
 
+`_outdesc.txt` orders its family blocks by total occurrences descending, which is
+how main's file read. That ordering is local to the file: family *labels* come
+from `family_numbers()` and stay consistent with the figures and `_clusters.tsv`,
+so the labels in `_outdesc.txt` are not ascending. Main had both because it
+derived its numbering from the same sort.
+
 `RnaClusterer` mirrors this with nhmmer for RNA genes, falling back to grouping
 by normalised product name when no nucleotide sequence is available.
+
+---
+
+## Tree building
+
+`TreeBuilder` runs three stages: MAFFT `--auto`, a gap-threshold column trim, then
+an inference engine. The trim keeps columns where at least `gap_threshold` of the
+sequences carry a residue — the same rule as `trimal -gt`, which is what ete3's
+`trimal01` ran in the old pipeline. It is implemented in `_trim` rather than
+shelled out because `-gt` is a deterministic column filter and adding a binary
+dependency for ten lines is not worth it; the heuristic modes (`-automated1`,
+`-gappyout`) would need the real trimal. If trimming would empty the alignment,
+the untrimmed one is used instead.
+
+The engine is `veryfasttree` by default and `iqtree` under `--iqtree`
+(ModelFinder, plus 1000 ultrafast bootstrap replicates when there are at least
+four taxa — below that IQ-TREE refuses to bootstrap). The binary is looked up as
+`iqtree3`, `iqtree2`, then `iqtree`, since distributions disagree on the name.
+
+The trimmed alignment stays on the builder as `.alignment` so `main()` can write
+it as `_tree.aln` without re-running anything.
+
+`write_run_info()` runs immediately after the output path is resolved, before any
+network or file work, so a crashed run still leaves `_runinfo.txt` and a copy of
+the input list. It reads defaults off the parser rather than hardcoding them, so
+the "set explicitly" split stays correct as options are added. Anything named in
+`SECRET_ARGS`/`SECRET_FLAGS` is masked in both the option dump and the recorded
+command line — `_redact_command_line` handles `--flag value` and `--flag=value`,
+since only covering the first form leaks the key in the second.
 
 ---
 
@@ -155,9 +195,12 @@ estimated, and the font stack is pinned to metrically identical faces (Arial,
 Liberation Sans, Helvetica). A generic `sans-serif` would resolve differently per
 platform and render text at a width the layout never reserved.
 
-`ReportWriter` owns every TSV and text output. It takes the leaf order under
+`ReportWriter` owns every TSV, text and FASTA output. It takes the leaf order under
 `--tree_order` and re-keys its per-row map, so the tables and the figures agree
-on row order rather than only the figures being sorted.
+on row order rather than only the figures being sorted. The FASTA outputs come
+from the extractor's sequence tables; queries are excluded from
+`_flankgene.fasta` because `extractor.sequences` holds every gene in the window,
+query included.
 
 ---
 

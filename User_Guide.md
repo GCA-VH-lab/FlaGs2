@@ -29,12 +29,17 @@ flag:
 | Flag | Needs |
 |---|---|
 | `--tree`, `--tree_order` | `mafft` and `VeryFastTree` on `PATH` |
+| `--iqtree` | `mafft` and `iqtree` on `PATH` |
 | `--domains` | an HMM database — run `pfamA_loader.sh` to fetch Pfam-A |
 | `--tmhmm`, `--signalp` | `pip install pybiolib` and a network connection |
 | `--sismis` | `pip install sismis` |
 
 If a tool is missing, FlaGs2 prints a warning, skips that feature, and finishes
 the rest of the run.
+
+`mafft`, `VeryFastTree` and `iqtree` are all in `environment.yml`, so the conda
+route covers the tree flags without anything extra. The table above matters only
+if you install by hand.
 
 Keep `pyhmmer` in the 0.12 series. FlaGs2 is developed against it, and sismis
 (via gecco) requires it — an unpinned install can leave the two in conflict.
@@ -103,6 +108,7 @@ is optional. See [All options](#all-options) for the full list and
 |---|---|---|
 | `--use_local DIR` | — | Search a directory of local genomes before going to NCBI. A genome is a `.gff` and `.faa` sharing a basename; `.fna` and RNA FASTAs are picked up if present. Files may be gzipped. Anything not found falls back to NCBI. |
 | `-m`, `--max_assemblies N` | `1` | How many genomes one protein may expand to when it occurs in several. Each genome becomes its own row. Raise to compare strains. Above `1`, row labels in the figures become `protein\|genome` so the rows stay distinguishable. |
+| `--no_cross_db` | off | Keep protein and genome in the same database: RefSeq proteins (`WP_`, `NP_`, `YP_`, ...) resolve only to `GCF_` assemblies, INSDC proteins only to `GCA_`. A protein whose only assemblies sit in the other database is then reported as unresolved rather than annotated against a mirrored genome. Assemblies you supply yourself in the input file are never filtered. |
 | `-api`, `--api_key KEY` | — | NCBI API key. Also raises the download rate cap from 5/s to 10/s. |
 | `-tmp`, `--temporary DIR` | `./genomes` | Where downloads are stored. Deleted at the end unless `-k`. |
 | `-k`, `--keep` | off | Keep downloaded genomes instead of deleting them. Useful for reruns — the directory can be fed straight back in via `--use_local`. |
@@ -133,7 +139,8 @@ feature, and completes the rest of the run.
 
 | Option | Needs | Description |
 |---|---|---|
-| `--tree` | mafft, VeryFastTree | Also build a phylogenetic tree with the neighbourhoods aligned to its leaves (`_tree.svg`, `_tree.nwk`). Does not change the main figure. |
+| `--tree` | mafft, VeryFastTree | Also build a phylogenetic tree with the neighbourhoods aligned to its leaves (`_tree.svg`, `_tree.nwk`, `_tree.aln`). Does not change the main figure. |
+| `--iqtree` | mafft, iqtree | Build the tree with IQ-TREE instead of VeryFastTree: ModelFinder picks the substitution model and 1000 ultrafast bootstrap replicates give branch support. Implies `--tree`. Far slower, so use it for the final figure rather than while exploring. |
 | `--tree_order` | mafft, VeryFastTree | Order rows by tree leaf order, in the main figure and in `_operon.tsv`. Implies `--tree`. |
 | `--domains` | `--hmmdb` | Scan flanking proteins for domains and write `_domains.svg` plus `_domains.tsv`. |
 | `--hmmdb FILE` | — | HMM database for `--domains`, e.g. `pfam_db/Pfam-A.hmm`. Run `pfamA_loader.sh` to fetch it. |
@@ -224,6 +231,10 @@ python3 FlaGs2.py -i input.txt -u you@example.com -O run2 --use_local ./genomes
 
 ## Output files
 
+`_runinfo.txt` and `_input.txt` are written before any work starts, so a run that
+fails partway still records what it was asked to do. Your `--api_key` value is
+masked in `_runinfo.txt`.
+
 Every file is prefixed with the output directory's name, stamp included — a run
 with `-O results` writes `results_20260810_093134/results_20260810_093134_operon.tsv`.
 The tables below drop the stamp and write `results_...` for readability.
@@ -235,6 +246,7 @@ The tables below drop the stamp and write `results_...` for readability.
 | `results_neighbors.svg` | the main diagram: one row per query, genes as arrows coloured by family |
 | `results_tree.svg` | same rows aligned to a phylogenetic tree (`--tree`) |
 | `results_tree.nwk` | the tree in Newick format |
+| `results_tree.aln` | the trimmed alignment the tree was built from |
 | `results_domains.svg` | neighbourhoods with domains, TM regions and signal peptides drawn on |
 | `results_secretion.svg` | neighbourhoods with predicted secretion systems marked (`--sismis`) |
 
@@ -253,6 +265,16 @@ The tables below drop the stamp and write `results_...` for readability.
 | `results_flankgene_Report.log` | each neighbourhood as a compact family chain |
 | `results_secretion.tsv` | Sismis hits and which neighbourhoods they overlap (`--sismis`) |
 | `results_sismis_diagnostics.txt` | per-genome Sismis status: scanned, nothing found, or skipped and why (`--sismis`) |
+| `results_runinfo.txt` | how the run was invoked: version, host, command line, and every option split into those you set and those left at default |
+| `results_input.txt` | a copy of the input list, so the results stay self-contained |
+
+**Sequences**
+
+| File | Contents |
+|---|---|
+| `results_tree.fasta` | one query protein per row, named by row id — the tree input |
+| `results_flankgene.fasta` | the flanking proteins, headers `accession\|product` |
+| `results_all.fasta` | both of the above in one file |
 
 ### Reading the figure
 

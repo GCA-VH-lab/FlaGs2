@@ -1,10 +1,11 @@
 import os
+import shutil
 import subprocess
 import tempfile
 from io import StringIO
 from typing import Dict, List, Optional, Tuple
 
-from Bio import Phylo
+from Bio import Phylo, SeqIO
 
 from flags2_view import _FlaGsBase
 from FlaGs2 import FlankingGene
@@ -12,8 +13,14 @@ from FlaGs2 import FlankingGene
 
 class TreeBuilder:
 
-  def __init__(self, threads: int = 0):
+  GAP_CHARS = "-."
+
+  def __init__(self, threads: int = 0, engine: str = "veryfasttree",
+      gap_threshold: float = 0.1):
     self.threads = threads
+    self.engine = engine
+    self.gap_threshold = gap_threshold
+    self.alignment: Dict[str, str] = {}
 
   def build(self, sequences: Dict[str, str]) -> Tuple[str, List[str]]:
     names = list(sequences)
@@ -33,10 +40,20 @@ class TreeBuilder:
           "--thread", str(self.threads), fasta],
           check=True, stdout=out, stderr=subprocess.DEVNULL)
 
-        newick = subprocess.run(["VeryFastTree", aln],
-          check=True, capture_output=True, text=True).stdout.strip()
-    except FileNotFoundError:
-      print("Warning: --tree needs mafft and VeryFastTree on PATH; skipping the tree.")
+        self.alignment = self._trim(self._read_alignment(aln), self.gap_threshold)
+        trimmed = os.path.join(tmp, "q.trimmed.aln")
+        with open(trimmed, "w") as out:
+          for name, seq in self.alignment.items():
+            out.write(">{}\n{}\n".format(name, seq))
+
+        if self.engine == "iqtree":
+          newick = self._run_iqtree(trimmed, tmp, len(names))
+        else:
+          newick = subprocess.run(["VeryFastTree", trimmed],
+            check=True, capture_output=True, text=True).stdout.strip()
+    except FileNotFoundError as e:
+      print("Warning: tree building needs mafft and {} on PATH; skipping the tree "
+            "({}).".format("iqtree" if self.engine == "iqtree" else "VeryFastTree", e))
       return "", names
     except subprocess.CalledProcessError as e:
       print("Warning: tree building failed, skipping the tree ({}).".format(e))
@@ -44,6 +61,40 @@ class TreeBuilder:
 
     leaf_order = [t.name for t in Phylo.read(StringIO(newick), "newick").get_terminals()]
     return newick, leaf_order
+
+  def _run_iqtree(self, aln: str, tmp: str, n_taxa: int) -> str:
+    binary = next((b for b in ("iqtree3", "iqtree2", "iqtree")
+                   if shutil.which(b)), None)
+    if binary is None:
+      raise FileNotFoundError("no iqtree binary found")
+    cmd = [binary, "-s", aln, "-m", "MFP", "--prefix", os.path.join(tmp, "iq"),
+           "-T", str(self.threads) if self.threads else "AUTO", "--quiet"]
+    if n_taxa >= 4:
+      cmd += ["-B", "1000"]   # ultrafast bootstrap needs at least 4 taxa
+    subprocess.run(cmd, check=True, capture_output=True, text=True)
+    with open(os.path.join(tmp, "iq.treefile")) as fh:
+      return fh.read().strip()
+
+  @staticmethod
+  def _read_alignment(path: str) -> Dict[str, str]:
+    return {rec.id: str(rec.seq) for rec in SeqIO.parse(path, "fasta")}
+
+  @classmethod
+  def _trim(cls, alignment: Dict[str, str], gap_threshold: float) -> Dict[str, str]:
+    """Drop columns where fewer than gap_threshold of sequences carry a residue.
+
+    Equivalent to trimal -gt, which is what ete3's trimal01 ran in the old pipeline.
+    """
+    rows = list(alignment.values())
+    if not rows:
+      return alignment
+    width = len(rows[0])
+    need = gap_threshold * len(rows)
+    keep = [i for i in range(width)
+            if sum(1 for r in rows if r[i] not in cls.GAP_CHARS) >= need]
+    if not keep or len(keep) == width:
+      return alignment
+    return {name: "".join(seq[i] for i in keep) for name, seq in alignment.items()}
 
 
 class NeighborhoodVisualizer(_FlaGsBase): 
