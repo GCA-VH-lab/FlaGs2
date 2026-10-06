@@ -1,4 +1,4 @@
-# FlaGs2
+# FlaGs2 - branch abandoned, moved to https://github.com/GCA-VH-lab/FlaGs3
 Predicting protein functional association by analysis of conservation of genomic context (Flanking Genes).
 
 Run the shell script 'build.sh' to create a conda environment specifically for FlaGs2, it requieres conda. 
